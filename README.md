@@ -251,10 +251,19 @@ can be replayed against a rebuilt binary:
 ./out/unrar t -y "${TMPDIR:-/tmp}/fil-c-utils-tests/findings/FILC-unrar-..."
 ```
 
-`OOM` is reported separately rather than counted as a failure. Under Fil-C an
-allocation that cannot be satisfied panics instead of returning `NULL`, so a
-run that hits the harness's address-space cap is a resource result, not a
-memory-safety result. See the limitation below.
+`OOM` and `HUGE` are reported separately rather than counted as failures. Both
+are Fil-C refusing an allocation, which is a resource result rather than a
+memory-safety one; see the runtime limitations below.
+
+`TIMEOUT` deserves its own reading. Fil-C does nothing about a decoder that
+simply never finishes, so a hang found here is almost always an upstream defect
+present in an ordinary build too, and worth confirming against one before
+blaming this repository. Fuzzing found such a case: setting one byte in a
+QCOW2 header makes the virtual disk size 64 PiB, and 7-Zip's QCOW handler then
+walks the implied cluster table, burning CPU indefinitely on a 640 KB file.
+Stock 7-Zip 26.02 behaves identically. It is a good reminder that memory safety
+and resource safety are separate problems, and that only the first one is
+solved here.
 
 ### 7-Zip's format handlers
 
@@ -405,10 +414,32 @@ memory limit for a container running these utilities with that in mind, and
 treat an abort under a tight cap as a resource result rather than evidence of a
 memory-safety defect. The fuzz stage classifies it as `OOM` for that reason.
 
-Fil-C converts memory-safety violations into deterministic process failures,
-which is a crash, not a recovery. A utility that panics on an untrusted archive
-is safe but unavailable, so a service that must keep running needs the usual
-supervision and per-request isolation regardless.
+The sharper form of this needs no memory limit at all. Fil-C will not create an
+object beyond a maximum size, and asks for one are refused with a panic rather
+than a recoverable failure. A corrupt archive whose header carries an
+unvalidated length reaches that ceiling directly. Fuzzing found one in 7-Zip's
+WIM handler, where `CUnpacker::Unpack2` sizes a buffer straight from the
+resource header (`WimIn.cpp:312`); an 11 MB file asks for 1.88 PiB:
+
+| | Stock 7-Zip 26.02 | This build |
+| --- | --- | --- |
+| Result | `ERROR: Can't allocate required memory!` | `filc safety error: attempt to allocate object that is too big` |
+| Exit | 2 | 133 |
+
+The unvalidated size field is an upstream weakness present in both builds. Only
+the outcome differs, and it differs the same way as the xz case: an ordinary
+build reports an error and exits, this one aborts. The fuzz stage reports these
+as `HUGE`, separately from `OOM` and from real memory-safety failures, because
+all three read very differently in a summary table and only the last is a
+Fil-C-caught bug.
+
+The practical consequence for both forms is the same. Fil-C makes these
+utilities memory-safe, not crash-free, on hostile input. A service that must
+stay available needs supervision and per-request isolation regardless.
+
+The same holds for the memory-safety violations Fil-C is actually there to
+catch: turning one into a deterministic process failure is containment, not
+recovery.
 
 ## Maintainer guide
 

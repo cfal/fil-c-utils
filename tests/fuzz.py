@@ -6,6 +6,7 @@ Every run gets one verdict:
   OK       the tool accepted the mutated file (mutations are often benign)
   ERR      the tool rejected it and exited normally -- the desired outcome
   OOM      the allocator gave up; under Fil-C that is a panic, not a NULL
+  HUGE     a size field asked for more than Fil-C will ever allocate
   LIMIT    the harness's own CPU/file-size cap fired
   FILC     Fil-C caught a memory-safety violation -- a latent bug in the tool
   SIGNAL   died some other way
@@ -29,13 +30,19 @@ FSIZE_LIMIT = 512 * 1024**2  # any single output file
 CPU_LIMIT = 25               # seconds of CPU
 WALL_TIMEOUT = 30            # seconds of wall clock
 
+# Fil-C refuses an allocation two ways, and neither is a memory-safety
+# violation: the allocator can be exhausted, or the requested size can exceed
+# the largest object Fil-C will create.  Both abort where an ordinary build
+# returns NULL or throws, so they are reported separately rather than being
+# counted as a safety failure or hidden as an ordinary error.
 OOM_MARKERS = ("filc safety error: out of memory",)
+HUGE_MARKERS = ("attempt to allocate object that is too big",)
 FILC_MARKERS = ("filc safety error", "filc panic", "filc internal error")
 
 STRATEGIES = ["bitflip", "byteset", "truncate", "chophead", "insert", "zerorun",
               "dupchunk", "swapchunk", "headermax", "bigfields", "asciidigits"]
 FAILING = ("FILC", "SIGNAL", "TIMEOUT", "SPAWNFAIL")
-VERDICTS = ("OK", "ERR", "OOM", "LIMIT", "FILC", "SIGNAL", "TIMEOUT")
+VERDICTS = ("OK", "ERR", "OOM", "HUGE", "LIMIT", "FILC", "SIGNAL", "TIMEOUT")
 
 
 def _load_7z_manifest():
@@ -103,6 +110,8 @@ def run(argv, cwd, stdin_path=None):
 
     if any(m in low for m in OOM_MARKERS):
         verdict = "OOM"
+    elif any(m in low for m in HUGE_MARKERS):
+        verdict = "HUGE"
     elif any(m in low for m in FILC_MARKERS):
         verdict = "FILC"
     elif timed_out:
@@ -373,9 +382,15 @@ def main():
 
     bad = sum(v for (_, vd), v in tally.items() if vd in FAILING)
     oom = sum(v for (_, vd), v in tally.items() if vd == "OOM")
+    huge = sum(v for (_, vd), v in tally.items() if vd == "HUGE")
     if oom:
         print(f"\n{oom} runs hit the {AS_LIMIT // 1024**3} GiB address-space cap "
-              f"(reported as an allocator panic, not a safety violation)")
+              f"(an allocator panic, not a safety violation)")
+    if huge:
+        print(f"\n{huge} runs asked for an allocation larger than Fil-C will make. "
+              f"That is an unvalidated size field in the utility, and it aborts here "
+              f"where an ordinary build reports an error. Reproducers are in "
+              f"{FINDINGS}.")
     if bad:
         print(f"\nFAIL: {bad} memory-safety failures; reproducers in {FINDINGS}")
         return 1
