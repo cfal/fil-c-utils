@@ -1,0 +1,56 @@
+name: build
+
+# Compiles the seven utilities and uploads one tarball per utility.
+#
+# This workflow is only ever called by another one (ci.yml), or run by hand.
+# It stops at the per-utility trees deliberately: merging them into a publish-
+# able bundle happens in ci.yml, after the test suite has passed.
+#
+# The utilities build independently, so they run as a matrix. Wall time is the
+# slowest single build rather than the sum of all seven.
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PLATFORM: linux/amd64
+
+jobs:
+  build:
+    name: build ${{ matrix.utility }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        utility: ['7z', 'unrar', 'tar', 'gzip', 'bzip2', 'xz', 'zstd']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.utility }}
+        run: |
+          mkdir -p "staging/${{ matrix.utility }}"
+          docker build \
+            --platform "${PLATFORM}" \
+            --target artifact \
+            --output "type=local,dest=staging/${{ matrix.utility }}" \
+            "./${{ matrix.utility }}"
+
+      # Tar before uploading. upload-artifact resolves symlinks into duplicate
+      # files and does not preserve the executable bit, and the artifact tree
+      # relies on both: twelve of the twenty commands are symlinks.
+      - name: Pack build output
+        run: tar -cf "${{ matrix.utility }}.tar" -C "staging/${{ matrix.utility }}" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-${{ matrix.utility }}
+          path: ${{ matrix.utility }}.tar
+          retention-days: 1
+          if-no-files-found: error

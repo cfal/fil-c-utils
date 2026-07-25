@@ -1,0 +1,190 @@
+name: ci
+
+# build -> test -> bundle.
+#
+# The test suite runs against the binaries that were just compiled, so it
+# cannot run before the build. Gating therefore sits on the bundle: nothing is
+# published unless tests/run-tests.sh passed against exactly those bytes.
+#
+# The compile itself lives in build.yml and is called from here, so the build
+# runs once per CI run rather than once per workflow.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      iters:
+        description: 'Fuzz mutations per archive per strategy'
+        required: false
+        default: '6'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build
+    uses: ./.github/workflows/build.yml
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      # lib.sh would otherwise pick ${TMPDIR:-/tmp}, which is not the runner's
+      # temp directory. Pinning it keeps the suite and the reproducer upload
+      # pointing at the same place. This is set here rather than in a job-level
+      # env block because the runner context does not exist at job level.
+      - name: Pin the test work directory
+        run: echo "WORK_DIR=${RUNNER_TEMP}/fil-c-utils-tests" >> "${GITHUB_ENV}"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: stage-*
+          path: stages
+
+      - name: Assemble out/
+        run: |
+          mkdir -p out
+          for tarball in stages/stage-*/*.tar; do
+            tar -xf "${tarball}" -C out
+          done
+          find out -maxdepth 1 -mindepth 1 | sort
+
+      # A pull request gets a lighter fuzz pass than a merge to main; the four
+      # cheap stages run identically either way. Each fuzz iteration is about
+      # 3,800 mutated archives.
+      - name: Select fuzz depth
+        id: depth
+        env:
+          # Passed through the environment rather than interpolated into the
+          # script, so a hand-entered value cannot become shell syntax.
+          REQUESTED: ${{ inputs.iters }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ -n "${REQUESTED}" ]; then
+            iters="${REQUESTED}"
+          elif [ "${EVENT}" = 'pull_request' ]; then
+            iters=3
+          else
+            iters=6
+          fi
+          case "${iters}" in
+            ''|*[!0-9]*) echo "iters must be a whole number, got '${iters}'"; exit 1 ;;
+          esac
+          echo "iters=${iters}" >> "${GITHUB_OUTPUT}"
+          echo "running with --iters ${iters}"
+
+      - name: Run the robustness suite
+        run: ./tests/run-tests.sh --iters "${{ steps.depth.outputs.iters }}"
+
+      # Mutated inputs that caused a failure, so a red run can be reproduced
+      # locally against the same binaries.
+      - name: Upload reproducers
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: findings-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/fil-c-utils-tests/findings
+            ${{ runner.temp }}/fil-c-utils-tests/fuzz.jsonl
+            ${{ runner.temp }}/fil-c-utils-tests/alignment.txt
+          retention-days: 14
+          if-no-files-found: ignore
+
+  bundle:
+    name: bundle
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: stage-*
+          path: stages
+
+      - name: Merge build outputs
+        run: |
+          mkdir -p out
+          for tarball in stages/stage-*/*.tar; do
+            echo "unpacking ${tarball}"
+            tar -xf "${tarball}" -C out
+          done
+          find out -maxdepth 1 -mindepth 1 | sort
+
+      # Same assertion build-all.sh makes before it declares success. Keep this
+      # list in step with EXECUTABLES there.
+      - name: Verify every command is present
+        run: |
+          missing=0
+          for executable in 7z 7zz unrar tar gzip gunzip zcat bzip2 bzip2recover \
+                            bunzip2 bzcat xz unxz xzcat lzma unlzma lzcat \
+                            zstd unzstd zstdcat; do
+            if [ ! -x "out/${executable}" ]; then
+              echo "missing or not executable: out/${executable}"
+              missing=1
+            fi
+          done
+          test -d out/licenses || { echo 'missing out/licenses'; missing=1; }
+          exit "${missing}"
+
+      # Every check reads a file rather than piping into grep. GitHub runs each
+      # step under `set -o pipefail`, and `readelf ... | grep -q` returns 141
+      # because grep exits on the first match and readelf dies on SIGPIPE, so
+      # the piped form reports failure on binaries that are perfectly fine.
+      - name: Verify the binaries are static Fil-C builds
+        run: |
+          failed=0
+          for binary in out/7z out/unrar out/tar out/gzip out/bzip2 out/xz out/zstd; do
+            file "${binary}" > /tmp/desc.txt
+            readelf -lW "${binary}" > /tmp/segments.txt
+            readelf -sW "${binary}" > /tmp/symbols.txt
+
+            if ! grep -Fq 'static-pie linked' /tmp/desc.txt; then
+              echo "${binary}: not a static PIE"
+              failed=1
+            fi
+            if grep -Fq ' INTERP ' /tmp/segments.txt; then
+              echo "${binary}: has a program interpreter"
+              failed=1
+            fi
+            if ! grep -Fq pizlonated /tmp/symbols.txt; then
+              echo "${binary}: no Fil-C transformed symbols"
+              failed=1
+            fi
+            if ! grep -Eq 'filc_call_user_main|zgc_alloc' /tmp/symbols.txt; then
+              echo "${binary}: no Fil-C runtime symbol"
+              failed=1
+            fi
+          done
+          if [ "${failed}" -eq 0 ]; then
+            echo 'all binaries are static Fil-C builds'
+          fi
+          exit "${failed}"
+
+      - name: Create tarball
+        id: tarball
+        run: |
+          : "${GITHUB_SHA:?GITHUB_SHA is unset, refusing to build an unnamed artifact}"
+          name="fil-c-utils-${GITHUB_SHA::7}-x86_64"
+          mv out "${name}"
+          tar -czf "${name}.tar.gz" \
+            --owner=0 --group=0 --numeric-owner --sort=name "${name}"
+          echo "name=${name}" >> "${GITHUB_OUTPUT}"
+          ls -l "${name}.tar.gz"
+          tar -tzf "${name}.tar.gz" | head -30
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.tarball.outputs.name }}
+          path: ${{ steps.tarball.outputs.name }}.tar.gz
+          if-no-files-found: error
