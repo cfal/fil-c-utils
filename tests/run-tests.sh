@@ -12,10 +12,10 @@ set -uo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/lib.sh"
 
 # Mutations per archive per strategy. The corpus is ~345 archives and 11
-# strategies, so each iteration is roughly 3800 mutated files and 20 minutes on
-# eight cores. Three is a reasonable post-build check; use --iters 24 or more
-# when the point is to go looking for something.
-ITERS=3
+# strategies, so one iteration is roughly 3800 mutated files and about three
+# minutes on eight cores. Six is a reasonable post-build check; use --iters 24
+# or more when the point is to go looking for something.
+ITERS=6
 JOBS="$(nproc 2>/dev/null || echo 4)"
 FUZZ_SEED="0"
 STAGES=()

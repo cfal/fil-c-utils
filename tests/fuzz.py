@@ -39,14 +39,20 @@ VERDICTS = ("OK", "ERR", "OOM", "LIMIT", "FILC", "SIGNAL", "TIMEOUT")
 
 
 def _load_7z_manifest():
-    """archive name -> the 7-Zip handler it was built for."""
+    """archive name -> the 7-Zip handler it was built for.
+
+    The manifest is name/handler/openable.  Take the handler field only: a
+    handler carrying a stray tab produces a -t argument 7-Zip rejects while
+    parsing its command line, which looks exactly like a clean rejection of
+    every mutated file and hides the fact that nothing was tested.
+    """
     path = CORPUS / "7z-manifest.tsv"
     out = {}
     if path.exists():
         for line in path.read_text().splitlines():
-            if "\t" in line:
-                name, handler = line.split("\t", 1)
-                out[name.strip()] = handler.strip()
+            fields = line.split("\t")
+            if len(fields) >= 2 and fields[0].strip() and fields[1].strip():
+                out[fields[0].strip()] = fields[1].strip()
     return out
 
 
@@ -275,6 +281,43 @@ def one_case(job):
     return results
 
 
+def preflight(seeds):
+    """Check every action shape actually runs before fuzzing anything.
+
+    A malformed invocation -- a bad -t argument, a flag the tool dropped -- makes
+    the tool exit nonzero for every input, which the classifier scores as ERR.
+    A whole run then reports a clean sweep while having tested nothing.  Each
+    distinct action is therefore tried once against the *unmutated* corpus file,
+    where anything other than success means the harness is wrong, not the tool.
+    """
+    problems = []
+    seen = set()
+    rng = random.Random("preflight")
+    for name in seeds:
+        for tool, tmpl, use_stdin in actions_for(name, rng):
+            shape = (tool, " ".join(tmpl))
+            if shape in seen or tool == "7z-cross":
+                continue        # cross-typing is meant to be rejected
+            seen.add(shape)
+            argv = [a.replace("{f}", str(CORPUS / name)) for a in tmpl]
+            argv[0] = str(OUT / argv[0])
+            with tempfile.TemporaryDirectory(dir=str(WORK / "work")) as td:
+                r = run(argv, cwd=td,
+                        stdin_path=str(CORPUS / name) if use_stdin else None)
+            if "incorrect command line" in r.get("err", "").lower() \
+                    or "unsupported" in r.get("err", "").lower():
+                problems.append(f"{tool}: {' '.join(tmpl)} on {name}\n"
+                                f"      {r['err'].strip().splitlines()[-1][:120]}")
+    if problems:
+        print(f"\npreflight FAILED: {len(problems)} action(s) are malformed and "
+              f"would score as ERR for every input:", file=sys.stderr)
+        for p in problems[:10]:
+            print(f"  {p}", file=sys.stderr)
+        return 1
+    print(f"preflight: {len(seen)} action shapes accepted")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--iters", type=int, default=6,
@@ -297,6 +340,9 @@ def main():
                    if p.is_file() and p.name not in metadata and a.filter in p.name)
     if not seeds:
         print(f"no corpus archives matched {a.filter!r}", file=sys.stderr)
+        return 2
+
+    if preflight(seeds):
         return 2
 
     jobs = [(s, st, i, a.seed) for s in seeds for st in STRATEGIES for i in range(a.iters)]

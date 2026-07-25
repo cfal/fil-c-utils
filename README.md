@@ -172,17 +172,18 @@ correct data exactly, refuse hostile data safely, and survive corrupt data
 without a memory-safety failure.
 
 ```sh
-./tests/run-tests.sh            # all stages, ~1 hour on eight cores
+./tests/run-tests.sh            # all stages
 ./tests/run-tests.sh --quick    # one mutation per archive per strategy
-./tests/run-tests.sh --iters 24 # deeper fuzzing, several hours
+./tests/run-tests.sh --iters 24 # deeper fuzzing
 ./tests/run-tests.sh alignment  # one stage only
 ```
 
-Only the `fuzz` stage takes real time, and it scales linearly with `--iters`:
-each iteration is roughly 3,800 mutated archives and about twenty minutes. The
-other four stages together finish in a few minutes, so
-`./tests/run-tests.sh alignment corpus roundtrip safety` is the quick check
-after a rebuild.
+Only the `fuzz` stage takes real time, and it scales linearly with `--iters`.
+One iteration is about 3,800 mutated archives and roughly 3 minutes on eight
+cores, so the default of 6 lands near 20 minutes and `--iters 24` near 80. The
+other four stages together finish in a few minutes, which makes
+`./tests/run-tests.sh alignment corpus roundtrip safety` the quick check after
+a rebuild.
 
 It needs only Python 3 and the executables in `out/`. Set `FILC_OUT` to test a
 different directory and `WORK_DIR` to move its scratch space, which defaults to
@@ -301,6 +302,25 @@ stage from demanding a clean test from them. That stage also re-verifies every
 container still reaches its handler, so a generator that quietly stops
 producing a real image is caught rather than leaving the fuzzer to report
 success while testing nothing.
+
+### Why the fuzzer checks itself first
+
+A fuzzing run reports success both when the tools are sound and when the
+harness never reached them, and the two are hard to tell apart from a summary
+table full of `ERR`. That is not hypothetical here: forcing the handler was
+briefly broken by a malformed `-t` argument, and 25,740 runs scored as clean
+rejections while 7-Zip was in fact refusing the command line before opening
+anything.
+
+So `fuzz.py` runs a preflight. Every distinct action shape is tried once
+against an *unmutated* corpus file, where anything other than success means the
+harness is wrong rather than the tool, and a malformed invocation aborts the
+run instead of producing a reassuring table. Cross-typed actions are exempt,
+since being rejected is the point of those.
+
+The same reasoning applies when reading results. A tool with zero `OK` verdicts
+across thousands of runs is usually a broken invocation, not a tool that
+rejects everything; treat that row as a harness bug until shown otherwise.
 
 ### The safety stage
 
