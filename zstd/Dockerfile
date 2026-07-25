@@ -66,6 +66,8 @@ RUN binary=/src/programs/zstd \
     && readelf -sW "${binary}" > /tmp/zstd.symbols \
     && grep -Fq "pizlonated" /tmp/zstd.symbols \
     && grep -Eq "filc_call_user_main|zgc_alloc" /tmp/zstd.symbols \
+    && strings -a "${binary}" > /tmp/zstd.strings \
+    && ! grep -q "@llvm\." /tmp/zstd.strings \
     && "${binary}" --version > /tmp/zstd.version \
     && grep -Fq "${ZSTD_VERSION}" /tmp/zstd.version \
     && "${binary}" -q -T2 -c README.md > /tmp/smoke.zst \

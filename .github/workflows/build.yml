@@ -20,14 +20,35 @@ env:
   PLATFORM: linux/amd64
 
 jobs:
+  # build-all.sh owns the list of utilities. Reading it here rather than
+  # repeating it keeps adding a utility a one-line change in one file, as the
+  # maintainer guide says it is.
+  prepare:
+    name: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      utilities: ${{ steps.list.outputs.utilities }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: |
+          # -n matters: without it jq consumes the first line as its initial
+          # input and `inputs` yields only the rest, silently dropping 7z.
+          utilities="$(./build-all.sh --list utilities | jq -Rnc '[inputs]')"
+          test "$(printf '%s' "${utilities}" | jq 'length')" -gt 0
+          echo "utilities=${utilities}" >> "${GITHUB_OUTPUT}"
+          echo "building: ${utilities}"
+
   build:
     name: build ${{ matrix.utility }}
     runs-on: ubuntu-latest
+    needs: prepare
     timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
-        utility: ['7z', 'unrar', 'tar', 'gzip', 'bzip2', 'xz', 'zstd']
+        utility: ${{ fromJSON(needs.prepare.outputs.utilities) }}
     steps:
       - uses: actions/checkout@v4
 

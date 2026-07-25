@@ -70,6 +70,8 @@ RUN binary=/src/src/xz/xz \
     && readelf -sW "${binary}" > /tmp/xz.symbols \
     && grep -Fq "pizlonated" /tmp/xz.symbols \
     && grep -Eq "filc_call_user_main|zgc_alloc" /tmp/xz.symbols \
+    && strings -a "${binary}" > /tmp/xz.strings \
+    && ! grep -q "@llvm\." /tmp/xz.strings \
     && "${binary}" --version > /tmp/xz.version \
     && grep -Fq "${XZ_VERSION}" /tmp/xz.version \
     && "${binary}" -T2 -c README > /tmp/smoke.xz \

@@ -74,6 +74,8 @@ RUN binary=/src/src/tar \
     && readelf -sW "${binary}" > /tmp/tar.symbols \
     && grep -Fq "pizlonated" /tmp/tar.symbols \
     && grep -Eq "filc_call_user_main|zgc_alloc" /tmp/tar.symbols \
+    && strings -a "${binary}" > /tmp/tar.strings \
+    && ! grep -q "@llvm\." /tmp/tar.strings \
     && "${binary}" --version > /tmp/tar.version \
     && grep -Fq "${TAR_VERSION}" /tmp/tar.version \
     && "${binary}" --help > /tmp/tar.help \

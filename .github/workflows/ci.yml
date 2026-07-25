@@ -107,6 +107,9 @@ jobs:
     needs: [build, test]
     timeout-minutes: 30
     steps:
+      # Needed for build-all.sh, which owns the list of expected commands.
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           pattern: stage-*
@@ -121,19 +124,18 @@ jobs:
           done
           find out -maxdepth 1 -mindepth 1 | sort
 
-      # Same assertion build-all.sh makes before it declares success. Keep this
-      # list in step with EXECUTABLES there.
+      # The same assertion build-all.sh makes before it declares success, over
+      # the same list, read from build-all.sh rather than copied.
       - name: Verify every command is present
         run: |
           missing=0
-          for executable in 7z 7zz unrar tar gzip gunzip zcat bzip2 bzip2recover \
-                            bunzip2 bzcat xz unxz xzcat lzma unlzma lzcat \
-                            zstd unzstd zstdcat; do
+          while read -r executable; do
+            [ -n "${executable}" ] || continue
             if [ ! -x "out/${executable}" ]; then
               echo "missing or not executable: out/${executable}"
               missing=1
             fi
-          done
+          done < <(./build-all.sh --list executables)
           test -d out/licenses || { echo 'missing out/licenses'; missing=1; }
           exit "${missing}"
 
@@ -144,7 +146,12 @@ jobs:
       - name: Verify the binaries are static Fil-C builds
         run: |
           failed=0
-          for binary in out/7z out/unrar out/tar out/gzip out/bzip2 out/xz out/zstd; do
+          # Every real executable in the tree, so this needs no list of its own
+          # and covers extras like bzip2recover. Symlinks are excluded because
+          # they resolve to a binary already checked.
+          mapfile -t binaries < <(find out -maxdepth 1 -type f -executable | sort)
+          echo "checking ${#binaries[@]} binaries"
+          for binary in "${binaries[@]}"; do
             file "${binary}" > /tmp/desc.txt
             readelf -lW "${binary}" > /tmp/segments.txt
             readelf -sW "${binary}" > /tmp/symbols.txt

@@ -1,15 +1,26 @@
 #!/usr/bin/env python3
-"""Scan DWARF for pointer-typed struct members at non-pointer-aligned offsets.
+"""Static checks that do not need the input, or the CPU, that would trip them.
 
-Fil-C stores a capability alongside every pointer slot and requires those slots
-to keep their natural alignment.  A packed struct that puts a pointer at, say,
-offset 2 compiles fine and then panics the first time the field is written.
-This finds those layouts statically, before any input has to trigger them.
+Two defects share a shape: they compile cleanly, survive every functional test,
+and then abort at run time on a machine or an input that reaches them.
+
+  misaligned pointer field
+      Fil-C stores a capability alongside every pointer slot and requires those
+      slots to keep their natural alignment.  A packed struct that puts a
+      pointer at, say, offset 2 panics the first time that field is written.
+
+  unhandled intrinsic
+      Fil-C compiles an intrinsic it cannot lower into a trap, embedding the
+      LLVM IR text as the panic message.  Programs that pick a SIMD
+      implementation from CPUID only reach those traps on a CPU with the
+      relevant feature, so a build can be clean on one machine and abort on
+      another.  The embedded strings are visible without that CPU.
 """
 import re, subprocess, sys
 from pathlib import Path
 
 PTR_ALIGN = 8
+INTRINSIC = re.compile(rb"@llvm\.[a-z0-9._]+")
 
 
 def dwarf(binary):
@@ -99,17 +110,33 @@ def scan(binary):
     return findings
 
 
+def unhandled_intrinsics(binary):
+    """Distinct LLVM intrinsics Fil-C compiled into a trap."""
+    return sorted({m.decode() for m in INTRINSIC.findall(binary.read_bytes())})
+
+
 def main():
+    findings = 0
     for b in sys.argv[1:]:
         p = Path(b)
         if p.is_symlink() or not p.is_file():
             continue
-        f = scan(p)
-        uniq = sorted(set(f))
-        status = f"{len(uniq)} misaligned pointer field(s)" if uniq else "clean"
-        print(f"{p.name:<14} {status}")
-        for s, mem, off in uniq:
+
+        misaligned = sorted(set(scan(p)))
+        intrinsics = unhandled_intrinsics(p)
+
+        notes = []
+        if misaligned:
+            notes.append(f"{len(misaligned)} misaligned pointer field(s)")
+        if intrinsics:
+            notes.append(f"{len(intrinsics)} unhandled intrinsic(s)")
+        findings += len(misaligned) + len(intrinsics)
+
+        print(f"{p.name:<14} {', '.join(notes) if notes else 'clean'}")
+        for s, mem, off in misaligned:
             print(f"                 {s}.{mem} @ offset {off}")
+        for name in intrinsics:
+            print(f"                 {name}")
     return 0
 
 

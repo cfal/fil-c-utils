@@ -1,0 +1,123 @@
+--- a/C/AesOpt.c
++++ b/C/AesOpt.c
+@@ -21,8 +21,10 @@
+         #if !defined(__AES__)
+           #define ATTRIB_AES __attribute__((__target__("aes")))
+         #endif
+-      #if defined(__clang__) && (__clang_major__ >= 8) \
+-          || defined(__GNUC__) && (__GNUC__ >= 8)
++      /* Fil-C cannot execute AVX intrinsics; the VAES path reaches
++         llvm.x86.avx.vzeroupper and traps at run time on VAES-capable CPUs. */
++      #if !defined(__FILC__) && (defined(__clang__) && (__clang_major__ >= 8) \
++          || defined(__GNUC__) && (__GNUC__ >= 8))
+         #define USE_INTEL_VAES
+         #if !defined(__AES__) || !defined(__VAES__) || !defined(__AVX__) || !defined(__AVX2__)
+           #define ATTRIB_VAES __attribute__((__target__("aes,vaes,avx,avx2")))
+--- a/C/Aes.c
++++ b/C/Aes.c
+@@ -69,8 +69,9 @@
+   #elif defined(Z7_CLANG_VERSION) && (Z7_CLANG_VERSION >= 30800) \
+      || defined(Z7_GCC_VERSION)   && (Z7_GCC_VERSION   >= 40400)
+     #define USE_HW_AES
+-      #if defined(__clang__) && (__clang_major__ >= 8) \
+-          || defined(__GNUC__) && (__GNUC__ >= 8)
++      /* not under Fil-C: the VAES path uses AVX intrinsics */
++      #if !defined(__FILC__) && (defined(__clang__) && (__clang_major__ >= 8) \
++          || defined(__GNUC__) && (__GNUC__ >= 8))
+         #define USE_HW_VAES
+       #endif
+   #elif defined(_MSC_VER)
+--- a/C/Blake2s.c
++++ b/C/Blake2s.c
+@@ -84,7 +84,9 @@
+ #endif
+ 
+ 
+-#if defined(__AVX2__)
++#if defined(__FILC__)
++  /* no AVX under Fil-C: leave Z7_BLAKE2S_USE_AVX2 undefined */
++#elif defined(__AVX2__)
+   #define Z7_BLAKE2S_USE_AVX2
+ #else
+   #if    defined(Z7_GCC_VERSION) && (Z7_GCC_VERSION >= 40900) \
+--- a/C/LzFind.c
++++ b/C/LzFind.c
+@@ -602,9 +602,12 @@
+     // || defined(__INTEL_COMPILER) && (__INTEL_COMPILER >= 1900)
+ 
+       #define USE_LZFIND_SATUR_SUB_128
+-      #define USE_LZFIND_SATUR_SUB_256
+       #define LZFIND_ATTRIB_SSE41 __attribute__((__target__("sse4.1")))
++      /* no AVX under Fil-C */
++      #if !defined(__FILC__)
++      #define USE_LZFIND_SATUR_SUB_256
+       #define LZFIND_ATTRIB_AVX2  __attribute__((__target__("avx2")))
++      #endif
+   #elif defined(_MSC_VER)
+     #if (_MSC_VER >= 1600)
+       #define USE_LZFIND_SATUR_SUB_128
+--- a/C/SwapBytes.c
++++ b/C/SwapBytes.c
+@@ -22,10 +22,15 @@
+   // #if defined(__INTEL_COMPILER) && (__INTEL_COMPILER >= 1900)
+   #if defined(__clang__) && (__clang_major__ >= 4) \
+       || defined(Z7_GCC_VERSION) && (Z7_GCC_VERSION >= 40701)
++      /* no AVX under Fil-C: cap the dispatch at SSSE3 */
++      #if defined(__FILC__)
++      #define k_SwapBytes_Mode_MAX  k_SwapBytes_Mode_SSSE3
++      #else
+       #define k_SwapBytes_Mode_MAX  k_SwapBytes_Mode_AVX2
++      #define SWAP_ATTRIB_AVX2  __attribute__((__target__("avx2")))
++      #endif
+       #define SWAP_ATTRIB_SSE2  __attribute__((__target__("sse2")))
+       #define SWAP_ATTRIB_SSSE3 __attribute__((__target__("ssse3")))
+-      #define SWAP_ATTRIB_AVX2  __attribute__((__target__("avx2")))
+   #elif defined(_MSC_VER)
+     #if (_MSC_VER == 1900)
+       #pragma warning(disable : 4752) // found Intel(R) Advanced Vector Extensions; consider using /arch:AVX
+--- a/C/Sha512Opt.c
++++ b/C/Sha512Opt.c
+@@ -9,9 +9,10 @@
+ #ifdef MY_CPU_X86_OR_AMD64
+   #if defined(__INTEL_COMPILER) && (__INTEL_COMPILER >= 2400) && (__INTEL_COMPILER <= 9900) // fix it
+       #define USE_HW_SHA
+-  #elif defined(Z7_LLVM_CLANG_VERSION)  && (Z7_LLVM_CLANG_VERSION  >= 170001) \
++  /* the SHA-512 extension path also requires AVX2, so not under Fil-C */
++  #elif !defined(__FILC__) && (defined(Z7_LLVM_CLANG_VERSION)  && (Z7_LLVM_CLANG_VERSION  >= 170001) \
+      || defined(Z7_APPLE_CLANG_VERSION) && (Z7_APPLE_CLANG_VERSION >= 170001) \
+-     || defined(Z7_GCC_VERSION)         && (Z7_GCC_VERSION         >= 140000)
++     || defined(Z7_GCC_VERSION)         && (Z7_GCC_VERSION         >= 140000))
+       #define USE_HW_SHA
+       #if !defined(__INTEL_COMPILER)
+       // icc defines __GNUC__, but icc doesn't support __attribute__(__target__)
+--- a/C/Sha512.c
++++ b/C/Sha512.c
+@@ -11,11 +11,12 @@
+ #include "CpuArch.h"
+ 
+ #ifdef MY_CPU_X86_OR_AMD64
+-  #if   defined(Z7_LLVM_CLANG_VERSION)  && (Z7_LLVM_CLANG_VERSION  >= 170001) \
++  /* not under Fil-C: the SHA-512 extension path also requires AVX2 */
++  #if   !defined(__FILC__) && (defined(Z7_LLVM_CLANG_VERSION)  && (Z7_LLVM_CLANG_VERSION  >= 170001) \
+      || defined(Z7_APPLE_CLANG_VERSION) && (Z7_APPLE_CLANG_VERSION >= 170001) \
+      || defined(Z7_GCC_VERSION)         && (Z7_GCC_VERSION         >= 140000) \
+      || defined(__INTEL_COMPILER) && (__INTEL_COMPILER >= 2400) && (__INTEL_COMPILER <= 9900) \
+-     || defined(_MSC_VER) && (_MSC_VER >= 1940)
++     || defined(_MSC_VER) && (_MSC_VER >= 1940))
+       #define Z7_COMPILER_SHA512_SUPPORTED
+   #endif
+ #elif defined(MY_CPU_ARM64) && defined(MY_CPU_LE)
+--- a/CPP/7zip/Crypto/MyAes.cpp
++++ b/CPP/7zip/Crypto/MyAes.cpp
+@@ -164,8 +164,9 @@
+   #elif defined(Z7_CLANG_VERSION) && (Z7_CLANG_VERSION >= 30800) \
+      || defined(Z7_GCC_VERSION)   && (Z7_GCC_VERSION   >= 40400)
+     #define USE_HW_AES
+-      #if defined(__clang__) && (__clang_major__ >= 8) \
+-          || defined(__GNUC__) && (__GNUC__ >= 8)
++      /* not under Fil-C: the VAES path uses AVX intrinsics */
++      #if !defined(__FILC__) && (defined(__clang__) && (__clang_major__ >= 8) \
++          || defined(__GNUC__) && (__GNUC__ >= 8))
+         #define USE_HW_VAES
+       #endif
+   #elif defined(_MSC_VER)

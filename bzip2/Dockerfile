@@ -60,6 +60,8 @@ RUN for binary in bzip2 bzip2recover; do \
         readelf -sW "${binary}" > "/tmp/${binary}.symbols"; \
         grep -Fq "pizlonated" "/tmp/${binary}.symbols"; \
         grep -Eq "filc_call_user_main|zgc_alloc" "/tmp/${binary}.symbols"; \
+        strings -a "${binary}" > "/tmp/${binary}.strings"; \
+        ! grep -q "@llvm\." "/tmp/${binary}.strings"; \
     done \
     && ./bzip2 --help >/tmp/bzip2-help.txt 2>&1 \
     && ./bzip2 -c README > /tmp/smoke.bz2 \

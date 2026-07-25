@@ -202,14 +202,27 @@ and the run says so; every other stage works from Python 3 alone.
 
 ### The alignment stage
 
-Fil-C stores a capability beside every pointer slot and requires those slots to
-keep their natural alignment. A `#pragma pack(1)` structure that holds a
-pointer therefore compiles cleanly, links cleanly, passes a valid-archive test,
-and then panics the first time that field is written. This stage reads DWARF
-from each executable and reports any pointer-typed member at an offset that is
-not a multiple of `sizeof(void *)`, so the defect is caught in the artifact
-rather than from a crash report. It is the cheapest stage and the one most
-worth running after any dependency upgrade.
+Two defects share an awkward shape: they compile cleanly, link cleanly, pass
+every functional test, and then abort at run time on a machine or an input that
+happens to reach them. This stage finds both by reading the binary, so neither
+needs the trigger to be reproduced.
+
+**Misaligned pointer fields.** Fil-C stores a capability beside every pointer
+slot and requires those slots to keep their natural alignment. A
+`#pragma pack(1)` structure holding a pointer panics the first time that field
+is written. The stage reads DWARF and reports any pointer-typed member at an
+offset that is not a multiple of `sizeof(void *)`.
+
+**Unhandled intrinsics.** Fil-C compiles an intrinsic it cannot lower into a
+trap, embedding the LLVM IR text as the panic message. This matters most for
+programs that pick a SIMD implementation from CPUID at run time: the trap is
+only reached on a CPU that has the relevant feature, so a build can be clean on
+the developer's machine and abort on someone else's. The stage greps each
+binary for those embedded strings, which is visible without that CPU.
+
+Both checks are also asserted in every utility's Dockerfile, so a build that
+introduces either fails immediately rather than shipping. This is the cheapest
+stage and the one most worth running after any dependency upgrade.
 
 ### The roundtrip stage
 
@@ -450,6 +463,9 @@ recovery.
 ├── .gitignore
 ├── README.md
 ├── build-all.sh
+├── .github/workflows/
+│   ├── ci.yml
+│   └── build.yml
 ├── 7z/
 │   ├── Dockerfile
 │   └── patches/
@@ -495,6 +511,14 @@ artifact stage. Keep utility-specific work inside that utility's directory.
 covers what a per-utility build check cannot: behaviour across formats, hostile
 input, and inputs that no upstream test suite ships.
 
+`ci.yml` runs on pushes to `main` and on pull requests, in three stages: build,
+then the test suite against those binaries, then the bundle. The bundle stage
+depends on the test stage, so a failing suite means no
+`fil-c-utils-<commit>-x86_64.tar.gz` is published. `build.yml` holds the
+compile matrix and exists only to be called from `ci.yml`; the utilities build
+independently, so running them in parallel makes CI take the time of the
+slowest one rather than the sum of all seven.
+
 ### Build design
 
 The builders use Fil-C's Pizfix/musl release rather than the glibc-oriented
@@ -522,6 +546,18 @@ the builder's loader or libraries are available.
 Its patch substitutes Fil-C's supported intrinsic interfaces. The build also
 defines `Z7_NO_LARGE_PAGES`; 7-Zip's 2 MiB alignment request exceeds Fil-C's
 supported allocation alignment.
+
+A second 7-Zip patch removes the AVX-family SIMD paths. Fil-C implements the
+SSE and AES-NI intrinsics 7-Zip uses, but not the AVX ones: the VAES AES path,
+Blake2s AVX2/AVX-512, the LzFind 256-bit match finder, the AVX2 byte swapper,
+and the SHA-512 extension all reach `llvm.x86.avx.vzeroupper`, which Fil-C
+compiles into a trap. Because 7-Zip chooses among these from CPUID at run time,
+the defect is invisible on a CPU without the feature. A build tested on a Zen 2
+machine, which has no VAES, ran encrypted archives perfectly and then aborted
+in `AesCtr_Code_HW_256` on CI hardware that does. The patch has to touch both
+the definition and the dispatch for each path, since 7-Zip repeats the same
+compiler-version block in `AesOpt.c` and `Aes.c` and `MyAes.cpp`, and again in
+`Sha512Opt.c` and `Sha512.c`. SSE and AES-NI stay enabled.
 
 unRAR normally enables packed structures and misaligned integer access on
 x86-64. Fil-C requires pointer slots to retain their natural alignment, so the
@@ -609,6 +645,11 @@ a meaningful functional test, export all applicable licenses, and use a
 Add the directory name to `UTILITIES` and every exported executable or alias to
 `EXECUTABLES` in `build-all.sh`. Extend the user-facing command table, output
 tree, pins, limitations, and compatibility notes in this README.
+
+CI needs no change for a new utility. It builds the utilities in parallel
+rather than calling `build-all.sh`, but it reads both lists from the script
+through `./build-all.sh --list utilities` and `--list executables`, so
+`build-all.sh` stays the only place either list is written down.
 
 Teach `tests/` about the new format: add archives to `make-corpus.sh`, a test
 command and decode action to `roundtrip.py` and `fuzz.py`, and hostile members

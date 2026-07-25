@@ -60,6 +60,8 @@ RUN binary=/src/gzip \
     && readelf -sW "${binary}" > /tmp/gzip.symbols \
     && grep -Fq "pizlonated" /tmp/gzip.symbols \
     && grep -Eq "filc_call_user_main|zgc_alloc" /tmp/gzip.symbols \
+    && strings -a "${binary}" > /tmp/gzip.strings \
+    && ! grep -q "@llvm\." /tmp/gzip.strings \
     && "${binary}" --version > /tmp/gzip.version \
     && grep -Fq "${GZIP_VERSION}" /tmp/gzip.version \
     && "${binary}" -c README > /tmp/smoke.gz \

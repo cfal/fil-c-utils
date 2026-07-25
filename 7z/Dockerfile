@@ -50,6 +50,13 @@ RUN sed -i 's/\r$//' C/CpuArch.c \
     && chmod u+w C/CpuArch.c \
     && patch --batch --forward -p1 < /tmp/7zip-fil-c.patch
 
+COPY patches/0002-no-avx-paths-under-fil-c.patch /tmp/7zip-no-avx.patch
+RUN for source in C/AesOpt.c C/Aes.c C/Blake2s.c C/LzFind.c C/SwapBytes.c \
+                  C/Sha512Opt.c C/Sha512.c CPP/7zip/Crypto/MyAes.cpp; do \
+        chmod u+w "${source}" && sed -i 's/\r$//' "${source}"; \
+    done \
+    && patch --batch --forward -p1 < /tmp/7zip-no-avx.patch
+
 WORKDIR /src/CPP/7zip/Bundles/Alone2
 RUN make -f makefile.gcc -j"$(nproc)" \
         CC=/opt/filc/build/bin/clang \
@@ -60,6 +67,12 @@ RUN make -f makefile.gcc -j"$(nproc)" \
         LFLAGS_STRIP= \
         LDFLAGS_STATIC_3=-static
 
+# The `@llvm.` check is the one that matters here. Fil-C compiles an intrinsic
+# it cannot lower into a trap, embedding the LLVM IR text as the panic message,
+# so an unsupported intrinsic is invisible until a CPU that selects that path
+# runs it. 7-Zip dispatches on CPUID at run time, which means a build can look
+# perfect on one machine and abort on another. Grepping the binary for those
+# embedded strings finds them without needing the CPU that would trigger them.
 WORKDIR /src
 RUN binary=/src/CPP/7zip/Bundles/Alone2/_o/7zz \
     && file "${binary}" > /tmp/7z.file \
@@ -71,6 +84,8 @@ RUN binary=/src/CPP/7zip/Bundles/Alone2/_o/7zz \
     && readelf -sW "${binary}" > /tmp/7z.symbols \
     && grep -Fq "pizlonated" /tmp/7z.symbols \
     && grep -Eq "filc_call_user_main|zgc_alloc" /tmp/7z.symbols \
+    && strings -a "${binary}" > /tmp/7z.strings \
+    && ! grep -q "@llvm\." /tmp/7z.strings \
     && "${binary}" i >/dev/null \
     && mkdir -p /tmp/smoke/input /tmp/smoke/output \
     && cp DOC/readme.txt /tmp/smoke/input/readme.txt \

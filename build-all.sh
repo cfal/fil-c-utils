@@ -5,7 +5,6 @@ set -euo pipefail
 readonly ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly OUT_DIR="${ROOT_DIR}/out"
 readonly PLATFORM="${PLATFORM:-linux/amd64}"
-readonly STAGING_DIR="$(mktemp -d "${TMPDIR:-/tmp}/fil-c-utils.XXXXXXXX")"
 readonly UTILITIES=(7z unrar tar gzip bzip2 xz zstd)
 readonly EXECUTABLES=(
     7z
@@ -29,6 +28,23 @@ readonly EXECUTABLES=(
     unzstd
     zstdcat
 )
+
+# Anything that needs these lists should ask for them rather than keeping its
+# own copy. CI builds the utilities in parallel instead of calling this script,
+# so without this it would carry a second list that could drift.
+if [[ "${1:-}" == "--list" ]]; then
+    case "${2:-}" in
+        utilities)   printf '%s\n' "${UTILITIES[@]}" ;;
+        executables) printf '%s\n' "${EXECUTABLES[@]}" ;;
+        *)
+            printf 'usage: %s --list utilities|executables\n' "${0}" >&2
+            exit 2
+            ;;
+    esac
+    exit 0
+fi
+
+readonly STAGING_DIR="$(mktemp -d "${TMPDIR:-/tmp}/fil-c-utils.XXXXXXXX")"
 
 cleanup() {
     rm -rf -- "${STAGING_DIR}"

@@ -53,8 +53,9 @@ wanted() {
 }
 
 do_alignment() {
-    # A packed struct that puts a pointer at an unaligned offset compiles fine
-    # and then panics on first use.  Catch it in the binary, not from a crash.
+    # Two defects that compile cleanly and only abort later: a pointer field at
+    # an unaligned offset, and an intrinsic Fil-C could not lower. Both are
+    # visible in the binary without the input, or the CPU, that would hit them.
     local bins=()
     local b
     for b in "${FILC_OUT}"/*; do
@@ -71,7 +72,12 @@ do_alignment() {
         printf 'FAIL: rebuild the affected utility; its Fil-C patch is not in effect\n'
         return 1
     fi
-    printf 'PASS: no pointer field sits at an unaligned offset\n'
+    if grep -q 'unhandled intrinsic' "${report}"; then
+        printf 'FAIL: an intrinsic Fil-C cannot lower is compiled in. It aborts on\n'
+        printf '      any CPU whose features select that path, whatever this one does.\n'
+        return 1
+    fi
+    printf 'PASS: no unaligned pointer fields, no unhandled intrinsics\n'
 }
 
 do_corpus() {

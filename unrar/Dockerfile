@@ -87,6 +87,8 @@ RUN file ./unrar > /tmp/unrar.file \
     && readelf -sW ./unrar > /tmp/unrar.symbols \
     && grep -Fq "pizlonated" /tmp/unrar.symbols \
     && grep -Eq "filc_call_user_main|zgc_alloc" /tmp/unrar.symbols \
+    && strings -a ./unrar > /tmp/unrar.strings \
+    && ! grep -q "@llvm\." /tmp/unrar.strings \
     && ./unrar >/tmp/unrar-help.txt
 
 RUN curl -fsSLo /tmp/rar5-subdirs.rar \
