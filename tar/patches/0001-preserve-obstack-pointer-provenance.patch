@@ -1,0 +1,21 @@
+--- a/gnu/obstack.h
++++ b/gnu/obstack.h
+@@ -147,9 +147,15 @@
+    relative to B.  Otherwise, use the faster strategy of computing the
+    alignment relative to 0.  */
+ 
+-#define __PTR_ALIGN(B, P, A)						      \
+-  __BPTR_ALIGN (sizeof (ptrdiff_t) < sizeof (void *) ? (B) : (char *) 0,      \
+-                P, A)
++#if defined __FILC__
++/* Fil-C pointers carry allocation provenance, so deriving an aligned pointer
++   from address zero produces a pointer that cannot access the chunk.  */
++# define __PTR_ALIGN(B, P, A) __BPTR_ALIGN (B, P, A)
++#else
++# define __PTR_ALIGN(B, P, A)						      \
++   __BPTR_ALIGN (sizeof (ptrdiff_t) < sizeof (void *) ? (B) : (char *) 0,     \
++                 P, A)
++#endif
+ 
+ #ifndef __attribute_pure__
+ # define __attribute_pure__ _GL_ATTRIBUTE_PURE

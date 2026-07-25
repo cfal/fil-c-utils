@@ -6,6 +6,29 @@ readonly ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly OUT_DIR="${ROOT_DIR}/out"
 readonly PLATFORM="${PLATFORM:-linux/amd64}"
 readonly STAGING_DIR="$(mktemp -d "${TMPDIR:-/tmp}/fil-c-utils.XXXXXXXX")"
+readonly UTILITIES=(7z unrar tar gzip bzip2 xz zstd)
+readonly EXECUTABLES=(
+    7z
+    7zz
+    unrar
+    tar
+    gzip
+    gunzip
+    zcat
+    bzip2
+    bzip2recover
+    bunzip2
+    bzcat
+    xz
+    unxz
+    xzcat
+    lzma
+    unlzma
+    lzcat
+    zstd
+    unzstd
+    zstdcat
+)
 
 cleanup() {
     rm -rf -- "${STAGING_DIR}"
@@ -28,15 +51,19 @@ build_utility() {
         "${ROOT_DIR}/${context}"
 }
 
-build_utility 7z 7z
-build_utility unrar unrar
+for utility in "${UTILITIES[@]}"; do
+    build_utility "${utility}" "${utility}"
+done
 
 rm -rf -- "${OUT_DIR}"
 mkdir -p -- "${OUT_DIR}"
-cp -a -- "${STAGING_DIR}/7z/." "${OUT_DIR}/"
-cp -a -- "${STAGING_DIR}/unrar/." "${OUT_DIR}/"
 
-test -x "${OUT_DIR}/7z"
-test -x "${OUT_DIR}/unrar"
+for utility in "${UTILITIES[@]}"; do
+    cp -a -- "${STAGING_DIR}/${utility}/." "${OUT_DIR}/"
+done
+
+for executable in "${EXECUTABLES[@]}"; do
+    test -x "${OUT_DIR}/${executable}"
+done
 
 printf 'Fil-C utilities are available in %s\n' "${OUT_DIR}"

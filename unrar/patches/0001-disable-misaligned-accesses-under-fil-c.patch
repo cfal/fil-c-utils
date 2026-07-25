@@ -1,0 +1,11 @@
+--- a/os.hpp
++++ b/os.hpp
+@@ -267,7 +267,7 @@
+   #endif
+ #endif
+ 
+-#if !defined(BIG_ENDIAN) && defined(_WIN_ALL) || defined(__i386__) || defined(__x86_64__) || defined(__aarch64__)
++#if !defined(__FILC__) && (!defined(BIG_ENDIAN) && defined(_WIN_ALL) || defined(__i386__) || defined(__x86_64__) || defined(__aarch64__))
+ // Allow unaligned integer access, increases speed in some operations.
+ #define ALLOW_MISALIGNED
+ #endif

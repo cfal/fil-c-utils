@@ -1,0 +1,68 @@
+From: fil-c-utils maintainers
+Subject: [PATCH] Honor ZSTD_DISABLE_ASM in inline assembly guards
+
+ZSTD_NO_ASM adds ZSTD_DISABLE_ASM throughout the zstd build, but several inline
+x86 assembly blocks did not check it. Fil-C cannot safely represent the
+pointer-valued result of ZSTD_selectAddr's assembly, and it rejects the
+assembler alignment directives. Use the existing portable C implementation
+and skip optional loop-alignment hints whenever assembly has been disabled.
+
+--- a/lib/compress/zstd_compress_internal.h
++++ b/lib/compress/zstd_compress_internal.h
+@@ -631,6 +631,6 @@ MEM_STATIC const BYTE*
+ ZSTD_selectAddr(U32 index, U32 lowLimit, const BYTE* candidate, const BYTE* backup)
+ {
+-#if defined(__GNUC__) && defined(__x86_64__)
++#if defined(__GNUC__) && defined(__x86_64__) && !defined(ZSTD_DISABLE_ASM)
+     __asm__ (
+         "cmp %1, %2\n"
+         "cmova %3, %0\n"
+--- a/lib/compress/zstd_lazy.c
++++ b/lib/compress/zstd_lazy.c
+@@ -1571,7 +1571,7 @@ ZSTD_compressBlock_lazy_generic(
+     }
+ 
+     /* Match Loop */
+-#if defined(__GNUC__) && defined(__x86_64__)
++#if defined(__GNUC__) && defined(__x86_64__) && !defined(ZSTD_DISABLE_ASM)
+     /* I've measured random a 5% speed loss on levels 5 & 6 (greedy) when the
+      * code alignment is perturbed. To fix the instability align the loop on 32-bytes.
+      */
+@@ -1969,7 +1969,7 @@ ZSTD_compressBlock_lazy_extDict_generic(
+     }
+ 
+     /* Match Loop */
+-#if defined(__GNUC__) && defined(__x86_64__)
++#if defined(__GNUC__) && defined(__x86_64__) && !defined(ZSTD_DISABLE_ASM)
+     /* I've measured random a 5% speed loss on levels 5 & 6 (greedy) when the
+      * code alignment is perturbed. To fix the instability align the loop on 32-bytes.
+      */
+--- a/lib/decompress/zstd_decompress_block.c
++++ b/lib/decompress/zstd_decompress_block.c
+@@ -1481,7 +1481,7 @@ ZSTD_decompressSequences_bodySplitLitBuffer(
+                 *
+                 *   https://gist.github.com/terrelln/9889fc06a423fd5ca6e99351564473f4
+                 */
+-#if defined(__GNUC__) && defined(__x86_64__)
++#if defined(__GNUC__) && defined(__x86_64__) && !defined(ZSTD_DISABLE_ASM)
+             __asm__(".p2align 6");
+ #  if __GNUC__ >= 7
+ 	    /* good for gcc-7, gcc-9, and gcc-11 */
+@@ -1543,7 +1543,7 @@ ZSTD_decompressSequences_bodySplitLitBuffer(
+         if (nbSeq > 0) {
+             /* there is remaining lit from extra buffer */
+ 
+-#if defined(__GNUC__) && defined(__x86_64__)
++#if defined(__GNUC__) && defined(__x86_64__) && !defined(ZSTD_DISABLE_ASM)
+             __asm__(".p2align 6");
+             __asm__("nop");
+ #  if __GNUC__ != 7
+@@ -1642,7 +1642,7 @@ ZSTD_decompressSequences_body(
+         ZSTD_initFseState(&seqState.stateML, &seqState.DStream, dctx->MLTptr);
+         assert(dst != NULL);
+ 
+-#if defined(__GNUC__) && defined(__x86_64__)
++#if defined(__GNUC__) && defined(__x86_64__) && !defined(ZSTD_DISABLE_ASM)
+             __asm__(".p2align 6");
+             __asm__("nop");
+ #  if __GNUC__ >= 7

@@ -62,9 +62,15 @@ RUN make -f makefile.gcc -j"$(nproc)" \
 
 WORKDIR /src
 RUN binary=/src/CPP/7zip/Bundles/Alone2/_o/7zz \
-    && file "${binary}" | grep -Fq "static-pie linked" \
-    && ! readelf -l "${binary}" | grep -q " INTERP " \
-    && readelf -S "${binary}" | grep -Fq ".debug_info" \
+    && file "${binary}" > /tmp/7z.file \
+    && grep -Fq "static-pie linked" /tmp/7z.file \
+    && readelf -lW "${binary}" > /tmp/7z.segments \
+    && ! grep -Fq " INTERP " /tmp/7z.segments \
+    && readelf -SW "${binary}" > /tmp/7z.sections \
+    && grep -Fq ".debug_info" /tmp/7z.sections \
+    && readelf -sW "${binary}" > /tmp/7z.symbols \
+    && grep -Fq "pizlonated" /tmp/7z.symbols \
+    && grep -Eq "filc_call_user_main|zgc_alloc" /tmp/7z.symbols \
     && "${binary}" i >/dev/null \
     && mkdir -p /tmp/smoke/input /tmp/smoke/output \
     && cp DOC/readme.txt /tmp/smoke/input/readme.txt \

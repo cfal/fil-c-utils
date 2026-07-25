@@ -6,6 +6,7 @@ ARG UNRAR_VERSION=7.2.7
 ARG UNRAR_SHA256=01d903a7dcf413cb2925696d7796e48e38d471f79bfe7ef3ad2aebf6c12dbefd
 ARG RAR_FIXTURE_COMMIT=09fd4f216ef502e478f1aeb6f0e193b49056eee8
 ARG RAR_FIXTURE_SHA256=4449d0e82e09f52af23a11cd84904625de8b15beafcf73e5c30dc3296beae0b2
+ARG RAR_FIXTURE_ARCHIVE_SHA256=ddcc0da3ee181763a8bc42d1cab55abca2f0f994380a81435c932ab24603f430
 
 FROM ubuntu:24.04 AS build
 
@@ -15,6 +16,7 @@ ARG UNRAR_VERSION
 ARG UNRAR_SHA256
 ARG RAR_FIXTURE_COMMIT
 ARG RAR_FIXTURE_SHA256
+ARG RAR_FIXTURE_ARCHIVE_SHA256
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -27,6 +29,7 @@ RUN apt-get update \
         libc6-dev \
         linux-libc-dev \
         make \
+        patch \
         patchelf \
         xz-utils \
     && rm -rf /var/lib/apt/lists/*
@@ -46,15 +49,44 @@ RUN curl -fsSLo /tmp/unrar.tar.gz \
     && tar --strip-components=1 -xzf /tmp/unrar.tar.gz \
     && rm /tmp/unrar.tar.gz
 
+COPY patches/0001-disable-misaligned-accesses-under-fil-c.patch /tmp/unrar-fil-c.patch
+RUN patch --batch --forward -p1 < /tmp/unrar-fil-c.patch
+
+# The patch turns off ALLOW_MISALIGNED, which is what stops unRAR from packing
+# its PPMd structures to one byte. Packed, those structures hold pointers at
+# offsets 2, 4 and 12; Fil-C keeps a capability beside every pointer slot and
+# requires natural alignment, so a RAR3 file that reaches the PPMd decoder
+# panics the process. That fails no build check and no valid-archive test, so
+# assert the layout directly instead of trusting the patch to have applied.
+RUN printf '%s\n' \
+        '#include "rar.hpp"' \
+        '#include <cstddef>' \
+        '#ifdef ALLOW_MISALIGNED' \
+        '#error "ALLOW_MISALIGNED must stay off under Fil-C"' \
+        '#endif' \
+        'static_assert(offsetof(RARPPM_STATE,Successor) % alignof(void*) == 0, "RARPPM_STATE::Successor is unaligned");' \
+        'static_assert(offsetof(RARPPM_CONTEXT,Suffix) % alignof(void*) == 0, "RARPPM_CONTEXT::Suffix is unaligned");' \
+        'static_assert(offsetof(RARPPM_MEM_BLK,next) % alignof(void*) == 0, "RARPPM_MEM_BLK::next is unaligned");' \
+        'static_assert(offsetof(RARPPM_MEM_BLK,prev) % alignof(void*) == 0, "RARPPM_MEM_BLK::prev is unaligned");' \
+        > /tmp/alignment-assert.cpp \
+    && /opt/filc/build/bin/clang++ -std=c++11 -I/src -Wno-invalid-offsetof \
+        -fsyntax-only /tmp/alignment-assert.cpp
+
 RUN make -j"$(nproc)" \
         CXX=/opt/filc/build/bin/clang++ \
         CXXFLAGS="-O2 -g -std=c++11 -Wno-logical-op-parentheses -Wno-switch -Wno-dangling-else" \
         LDFLAGS="-static -pthread" \
         STRIP=/bin/true
 
-RUN file ./unrar | grep -Fq "static-pie linked" \
-    && ! readelf -l ./unrar | grep -q " INTERP " \
-    && readelf -S ./unrar | grep -Fq ".debug_info" \
+RUN file ./unrar > /tmp/unrar.file \
+    && grep -Fq "static-pie linked" /tmp/unrar.file \
+    && readelf -lW ./unrar > /tmp/unrar.segments \
+    && ! grep -Fq " INTERP " /tmp/unrar.segments \
+    && readelf -SW ./unrar > /tmp/unrar.sections \
+    && grep -Fq ".debug_info" /tmp/unrar.sections \
+    && readelf -sW ./unrar > /tmp/unrar.symbols \
+    && grep -Fq "pizlonated" /tmp/unrar.symbols \
+    && grep -Eq "filc_call_user_main|zgc_alloc" /tmp/unrar.symbols \
     && ./unrar >/tmp/unrar-help.txt
 
 RUN curl -fsSLo /tmp/rar5-subdirs.rar \
@@ -65,6 +97,22 @@ RUN curl -fsSLo /tmp/rar5-subdirs.rar \
     && ./unrar x -idq -o+ /tmp/rar5-subdirs.rar /tmp/smoke/ \
     && echo "ecdc5536f73bdae8816f0ea40726ef5e9b810d914493075903bb90623d97b1d8  /tmp/smoke/sub/dir1/file1.txt" | sha256sum -c - \
     && echo "67ee5478eaadb034ba59944eb977797b49ca6aa8d3574587f36ebcbeeb65f70e  /tmp/smoke/sub/dir2/file2.txt" | sha256sum -c -
+
+RUN curl -fsSLo /tmp/rarfile-fixtures.tar.gz \
+        "https://github.com/markokr/rarfile/archive/${RAR_FIXTURE_COMMIT}.tar.gz" \
+    && echo "${RAR_FIXTURE_ARCHIVE_SHA256}  /tmp/rarfile-fixtures.tar.gz" | sha256sum -c - \
+    && mkdir -p /tmp/rarfile-fixtures \
+    && tar -C /tmp/rarfile-fixtures --strip-components=1 -xzf /tmp/rarfile-fixtures.tar.gz \
+    && rm /tmp/rarfile-fixtures.tar.gz \
+    && test "$(find /tmp/rarfile-fixtures/test/files -maxdepth 1 -type f -name '*.rar' | wc -l)" -ge 50 \
+    && for archive in /tmp/rarfile-fixtures/test/files/*.rar; do \
+        name="$(basename "${archive}")"; \
+        status=0; \
+        ./unrar t -idq -ppassword "${archive}" > "/tmp/${name}.log" 2>&1 || status=$?; \
+        test "${status}" -lt 128; \
+        ! grep -Eqi "filc safety error|filc panic|segmentation fault|core dumped" "/tmp/${name}.log"; \
+    done \
+    && ./unrar t -idq -ppassword /tmp/rarfile-fixtures/test/files/unicode.rar
 
 RUN install -Dm755 unrar /artifact/unrar \
     && install -Dm644 license.txt /artifact/licenses/unrar/license.txt \
