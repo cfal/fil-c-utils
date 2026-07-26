@@ -97,6 +97,15 @@ RUN binary=/src/src/tar \
     && cmp /tmp/smoke/input/readme /tmp/smoke/output/readme \
     && test "$(readlink /tmp/smoke/output/link)" = readme
 
+# The project's own test suite is a build gate, as it is for curl. It exercises
+# far more of the program than a round-trip smoke test can, and every case runs
+# against the Fil-C binary.
+RUN set -e; \
+    make check > /tmp/tar-check.log 2>&1 || { tail -60 /tmp/tar-check.log; exit 1; }; \
+    grep -E 'tests were successful|tests were skipped' /tmp/tar-check.log; \
+    passed="$(sed -n 's/^\([0-9][0-9]*\) tests were successful.*/\1/p' /tmp/tar-check.log | tail -1)"; \
+    test "${passed}" -ge 180
+
 RUN install -Dm755 src/tar /artifact/tar \
     && install -Dm644 COPYING /artifact/licenses/tar/COPYING \
     && install -Dm644 /opt/filc/LLVM-LICENSE.txt /artifact/licenses/fil-c/LLVM-LICENSE.txt \

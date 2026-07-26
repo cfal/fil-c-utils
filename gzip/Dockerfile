@@ -82,6 +82,15 @@ RUN binary=/src/gzip \
     && cmp README /tmp/gunzip.out \
     && cmp README /tmp/zcat.out
 
+# The project's own test suite is a build gate, as it is for curl. It exercises
+# far more of the program than a round-trip smoke test can, and every case runs
+# against the Fil-C binary.
+RUN set -e; \
+    make check > /tmp/gzip-check.log 2>&1 || { tail -40 /tmp/gzip-check.log; exit 1; }; \
+    grep -E '^# (TOTAL|PASS|FAIL|SKIP)' /tmp/gzip-check.log; \
+    total="$(sed -n 's/^# TOTAL: *//p' /tmp/gzip-check.log | tail -1)"; \
+    test "${total}" -ge 25
+
 RUN install -Dm755 gzip /artifact/gzip \
     && ln -s gzip /artifact/gunzip \
     && ln -s gzip /artifact/zcat \

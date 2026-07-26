@@ -186,13 +186,36 @@ check.
 
 ## Robustness testing
 
-The per-utility Dockerfiles run smoke tests against known-good inputs. curl is
-the exception: its Dockerfile runs curl's own test suite, and no artifact is
-produced unless every case passes. That suite builds its test servers with the
-same compiler, so Fil-C sits on both ends of every connection, and `stunnel4`
-is installed so the HTTPS cases run rather than skipping. The build also places
-a floor under how many cases ran, since a configuration change that quietly
-skipped most of the suite would otherwise look like a pass.
+Where a project ships a test suite, that suite gates its build: no artifact is
+produced unless it passes. This is much stronger than a round-trip smoke test,
+because the cases were written by the people who know where the program is
+delicate, and every one of them runs against the Fil-C binary.
+
+| Utility | Upstream suite | Result under Fil-C |
+| --- | --- | --- |
+| GNU tar | Autotest, 226 files | 208 pass, 36 skip |
+| curl | 1919 cases | 1675 pass, 244 skip |
+| gzip | 30 cases | 29 pass, 1 skip |
+| XZ Utils | 18 cases | 18 pass |
+| Zstandard | `playTests.sh` and fuzzers | all pass |
+| bzip2 | 3 sample round trips | pass |
+| 7-Zip | **none ships** | — |
+| unRAR | **none ships** | — |
+
+Nothing needed to be excluded or marked expected-to-fail: Fil-C causes no
+failures in any of them. Skipped cases are features these builds do not enable,
+such as HTTP/2 and IDN for curl, or tests needing root for tar.
+
+Two details are easy to get wrong. curl's suite silently skips its 62 HTTPS
+cases unless `stunnel4` is installed, and zstd's re-links the CLI, so it needs
+the same flags as the build or it fails to link rather than testing anything.
+Where a suite reports a count, the build asserts a floor under it, because a
+configuration change that quietly stopped running most of the cases would
+otherwise look exactly like a pass.
+
+**7-Zip and unRAR ship no test suite at all.** That is why `tests/` exists, and
+why its fuzzing is aimed hardest at those two: they have the largest parsing
+surface here and the least upstream coverage.
 
 The suite in `tests/` covers the archive utilities. It checks that the binaries
 in `out/` handle correct data exactly, refuse hostile data safely, and survive

@@ -86,6 +86,15 @@ RUN binary=/src/src/xz/xz \
     && "${binary}" -dc /tmp/smoke.xz > /tmp/smoke.out \
     && cmp README /tmp/smoke.out
 
+# The project's own test suite is a build gate, as it is for curl. It exercises
+# far more of the program than a round-trip smoke test can, and every case runs
+# against the Fil-C binary.
+RUN set -e; \
+    make check > /tmp/xz-check.log 2>&1 || { tail -40 /tmp/xz-check.log; exit 1; }; \
+    grep -E '^# (TOTAL|PASS|FAIL|SKIP)' /tmp/xz-check.log; \
+    total="$(sed -n 's/^# TOTAL: *//p' /tmp/xz-check.log | tail -1)"; \
+    test "${total}" -ge 15
+
 RUN install -Dm755 src/xz/xz /artifact/xz \
     && ln -s xz /artifact/unxz \
     && ln -s xz /artifact/xzcat \

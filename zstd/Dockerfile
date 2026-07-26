@@ -82,6 +82,20 @@ RUN binary=/src/programs/zstd \
     && "${binary}" -q -dc /tmp/smoke.zst > /tmp/smoke.out \
     && cmp README.md /tmp/smoke.out
 
+# The project's own test suite is a build gate, as it is for curl. It exercises
+# far more of the program than a round-trip smoke test can, and every case runs
+# against the Fil-C binary.
+RUN set -e; \
+    make check \
+        CC=/opt/filc/build/bin/clang \
+        CXX=/opt/filc/build/bin/clang++ \
+        CFLAGS="-O2 -g" \
+        LDFLAGS="-static" \
+        HAVE_ZLIB=0 HAVE_LZMA=0 HAVE_LZ4=0 ZSTD_NO_ASM=1 \
+        > /tmp/zstd-check.log 2>&1 || { tail -40 /tmp/zstd-check.log; exit 1; }; \
+    grep -Fq 'All tests completed successfully' /tmp/zstd-check.log; \
+    echo 'zstd: all tests completed successfully'
+
 RUN install -Dm755 programs/zstd /artifact/zstd \
     && ln -s zstd /artifact/unzstd \
     && ln -s zstd /artifact/zstdcat \

@@ -76,6 +76,12 @@ RUN for binary in bzip2 bzip2recover; do \
     && ./bzip2 -dc /tmp/smoke.bz2 > /tmp/smoke.out \
     && cmp README /tmp/smoke.out
 
+# The project's own test suite is a build gate, as it is for curl. It exercises
+# far more of the program than a round-trip smoke test can, and every case runs
+# against the Fil-C binary.
+RUN make test > /tmp/bzip2-test.log 2>&1 \
+    || { tail -30 /tmp/bzip2-test.log; exit 1; }
+
 RUN install -Dm755 bzip2 /artifact/bzip2 \
     && install -Dm755 bzip2recover /artifact/bzip2recover \
     && ln -s bzip2 /artifact/bunzip2 \
