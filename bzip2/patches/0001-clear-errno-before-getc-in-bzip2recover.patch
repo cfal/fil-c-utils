@@ -1,0 +1,19 @@
+--- a/bzip2recover.c
++++ b/bzip2recover.c
+@@ -202,7 +202,15 @@
+       bs->buffLive --;
+       return ( ((bs->buffer) >> (bs->buffLive)) & 0x1 );
+    } else {
+-      Int32 retVal = getc ( bs->handle );
++      Int32 retVal;
++      /* Clear errno before getc so the EOF test below cannot trip on a
++         stale value.  POSIX sets errno on a read error but does not clear
++         it on a clean EOF, and on musl an earlier call leaves EINVAL here,
++         so every archive was misreported as an I/O error and bzip2recover
++         recovered nothing.  Matches the fix pushed upstream on 2026-06-11:
++         https://sourceware.org/pipermail/bzip2-devel/2026q2/000304.html */
++      errno = 0;
++      retVal = getc ( bs->handle );
+       if ( retVal == EOF ) {
+          if (errno != 0) readError();
+          return 2;

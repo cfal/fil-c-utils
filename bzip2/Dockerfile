@@ -51,7 +51,7 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/bzip2.tar.gz \
     && tar --strip-components=1 -xzf /tmp/bzip2.tar.gz \
     && rm /tmp/bzip2.tar.gz
 
-COPY patches/0001-use-ferror-not-errno-to-detect-read-errors.patch /tmp/bzip2-recover.patch
+COPY patches/0001-clear-errno-before-getc-in-bzip2recover.patch /tmp/bzip2-recover.patch
 RUN patch --batch --forward -p1 < /tmp/bzip2-recover.patch
 
 RUN make -j"$(nproc)" bzip2 bzip2recover \
@@ -81,10 +81,10 @@ RUN for binary in bzip2 bzip2recover; do \
 
 # bzip2recover was built and checked for provenance but never run, which is how
 # it shipped unable to recover anything: after a getc returns EOF it tested
-# errno instead of the stream error indicator, and on musl errno still holds a
-# stale EINVAL at a clean end of file, so every archive looked like an I/O
-# error. Under glibc errno happened to be zero. Running it here is what makes
-# the patch above verifiable.
+# errno without clearing it first, and on musl a stale EINVAL from an earlier
+# call made every archive look like an I/O error. Under glibc errno happened to
+# be zero. The patch above is upstream's own fix (pushed 2026-06-11, not yet in
+# a release); running bzip2recover here is what makes it verifiable.
 RUN set -e; \
     cd /tmp; \
     /src/bzip2 -1 -c /src/README > recover-me.bz2; \
