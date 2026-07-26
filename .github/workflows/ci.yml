@@ -38,7 +38,7 @@ jobs:
     needs: build
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # lib.sh would otherwise pick ${TMPDIR:-/tmp}, which is not the runner's
       # temp directory. Pinning it keeps the suite and the reproducer upload
@@ -47,7 +47,7 @@ jobs:
       - name: Pin the test work directory
         run: echo "WORK_DIR=${RUNNER_TEMP}/fil-c-utils-tests" >> "${GITHUB_ENV}"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: stage-*
           path: stages
@@ -91,7 +91,7 @@ jobs:
       # locally against the same binaries.
       - name: Upload reproducers
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: findings-${{ github.run_id }}
           path: |
@@ -108,9 +108,9 @@ jobs:
     timeout-minutes: 30
     steps:
       # Needed for build-all.sh, which owns the list of expected commands.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: stage-*
           path: stages
@@ -190,7 +190,7 @@ jobs:
           ls -l "${name}.tar.gz"
           tar -tzf "${name}.tar.gz" | head -30
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.tarball.outputs.name }}
           path: ${{ steps.tarball.outputs.name }}.tar.gz
