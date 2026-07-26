@@ -96,8 +96,10 @@ def github_latest(repo, strip="", underscores=False):
     return newest(norm(t["name"]) for t in tags)
 
 
-def gnu_ftp(name):
-    html = get_text(f"https://ftp.gnu.org/gnu/{name}/")
+def gnu_ftp(name, directory=None):
+    # libidn2 releases live in the gnu/libidn/ directory alongside libidn's, so
+    # the listing to read and the file prefix to match are not always the same.
+    html = get_text(f"https://ftp.gnu.org/gnu/{directory or name}/")
     return newest(re.findall(rf"{re.escape(name)}-(\d+(?:\.\d+)+)\.tar\.", html))
 
 
@@ -138,6 +140,12 @@ COMPONENTS = [
     ("curl",    "curl/Dockerfile",  "CURL_VERSION",     lambda: github_latest("curl/curl", "curl-", underscores=True)),
     ("openssl", "curl/Dockerfile",  "OPENSSL_VERSION",  lambda: github_latest("openssl/openssl", "openssl-")),
     ("zlib",    "curl/Dockerfile",  "ZLIB_VERSION",     zlib_net),
+    ("wget",         "wget/Dockerfile", "WGET_VERSION",         lambda: gnu_ftp("wget")),
+    ("libunistring", "wget/Dockerfile", "LIBUNISTRING_VERSION", lambda: gnu_ftp("libunistring")),
+    ("libidn2",      "wget/Dockerfile", "LIBIDN2_VERSION",      lambda: gnu_ftp("libidn2", directory="libidn")),
+    ("libpsl",       "wget/Dockerfile", "LIBPSL_VERSION",       lambda: github_latest("rockdaboot/libpsl")),
+    ("pcre2",        "wget/Dockerfile", "PCRE2_VERSION",        lambda: github_latest("PCRE2Project/pcre2", "pcre2-")),
+    ("cares",        "wget/Dockerfile", "CARES_VERSION",        lambda: github_latest("c-ares/c-ares", "v")),
 ]
 
 

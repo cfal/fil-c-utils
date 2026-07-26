@@ -17,9 +17,10 @@ Included utilities:
 | XZ Utils | `xz`, `unxz`, `xzcat`, `lzma`, `unlzma`, `lzcat` |
 | Zstandard | `zstd`, `unzstd`, `zstdcat` |
 | curl | `curl` |
+| GNU Wget | `wget` |
 
 Every utility here reads untrusted input: seven of them parse archives, and
-curl speaks to the network. Fil-C turns spatial and temporal memory-safety
+curl and wget speak to the network. Fil-C turns spatial and temporal memory-safety
 violations into deterministic process failures. That is useful defense in depth for programs that process
 untrusted archives. It does not replace sandboxing, least privilege, archive
 size limits, path validation, or timely dependency updates.
@@ -40,7 +41,7 @@ Build everything:
 ./build-all.sh
 ```
 
-The script stages all eight builds and replaces `out/` only after every build
+The script stages all nine builds and replaces `out/` only after every build
 has succeeded. The tree has two directories, one for executables and one
 for license notices:
 
@@ -63,6 +64,7 @@ out/
 │   ├── unlzma -> xz
 │   ├── unxz -> xz
 │   ├── unzstd -> zstd
+│   ├── wget
 │   ├── xz
 │   ├── xzcat -> xz
 │   ├── zcat -> gzip
@@ -71,12 +73,18 @@ out/
 └── licenses/
     ├── 7zip/
     ├── bzip2/
+    ├── c-ares/
     ├── curl/
     ├── fil-c/
     ├── gzip/
+    ├── libidn2/
+    ├── libpsl/
+    ├── libunistring/
     ├── openssl/
+    ├── pcre2/
     ├── tar/
     ├── unrar/
+    ├── wget/
     ├── xz/
     ├── zlib/
     └── zstd/
@@ -94,14 +102,17 @@ They can run directly from `out/`:
 ./out/bin/xz -dc file.xz
 ./out/bin/zstd -dc file.zst
 ./out/bin/curl -sSL https://example.com/ -o page.html
+./out/bin/wget -qO page.html https://example.com/
 ```
 
-curl verifies certificates against `/etc/ssl/certs/ca-certificates.crt`, the
-path compiled in at build time, so it trusts whatever the host trusts and keeps
-benefiting from the host's certificate updates. Point it elsewhere with
-`--cacert`, `--capath`, or `CURL_CA_BUNDLE`. An environment with no bundle at
-that path, such as a scratch container or a distribution that keeps
-certificates elsewhere, has to supply one.
+curl and wget both verify certificates against
+`/etc/ssl/certs/ca-certificates.crt`, the path compiled in at build time, so
+they trust whatever the host trusts and keep benefiting from the host's
+certificate updates. Point curl elsewhere with `--cacert`, `--capath`, or
+`CURL_CA_BUNDLE`, and wget with `--ca-certificate`, `--ca-directory`, or
+`SSL_CERT_FILE`. An environment with no bundle at that path, such as a scratch
+container or a distribution that keeps certificates elsewhere, has to supply
+one.
 
 Set `PLATFORM` to override the Docker platform. The pinned Fil-C release is
 currently provided only for `linux/amd64`:
@@ -147,7 +158,7 @@ docker build \
   ./gzip
 ```
 
-Replace `gzip` with `7z`, `unrar`, `tar`, `bzip2`, `xz`, `zstd`, or `curl`. Docker
+Replace `gzip` with `7z`, `unrar`, `tar`, `bzip2`, `xz`, `zstd`, `curl`, or `wget`. Docker
 merges an individual artifact tree into an existing destination, so old files
 may remain. `build-all.sh` avoids that ambiguity by staging every build and
 replacing `out/` transactionally.
@@ -213,6 +224,7 @@ delicate, and every one of them runs against the Fil-C binary.
 | --- | --- | --- |
 | GNU tar | Autotest, 226 files | 208 pass, 36 skip |
 | curl | 1919 cases | 1675 pass, 244 skip |
+| GNU Wget | `tests/` + `testenv/`, 136 cases | 127 pass, 9 skip |
 | gzip | 30 cases | 29 pass, 1 skip |
 | XZ Utils | 18 cases | 18 pass |
 | Zstandard | `playTests.sh` and fuzzers | all pass |
@@ -222,14 +234,19 @@ delicate, and every one of them runs against the Fil-C binary.
 
 Nothing needed to be excluded or marked expected-to-fail: Fil-C causes no
 failures in any of them. Skipped cases are features these builds do not enable,
-such as HTTP/2 and IDN for curl, or tests needing root for tar.
+such as HTTP/2 and IDN for curl, or tests needing root for tar. Wget's nine
+skips are its HTTPS certificate-variation cases, which the harness can only run
+where it can generate throwaway certificates, plus one proxy-environment test.
 
 Two details are easy to get wrong. curl's suite silently skips its 62 HTTPS
 cases unless `stunnel4` is installed, and zstd's re-links the CLI, so it needs
 the same flags as the build or it fails to link rather than testing anything.
-Where a suite reports a count, the build asserts a floor under it, because a
-configuration change that quietly stopped running most of the cases would
-otherwise look exactly like a pass.
+Wget's top-level `make check` also recurses into `fuzz/`, whose harnesses need
+a fuzzing runtime, ship no corpus, and call `dlsym` at exit, which Fil-C
+forbids in a static build; its `tests/` and `testenv/` suites are run directly
+instead. Where a suite reports a count, the build asserts a floor under it,
+because a configuration change that quietly stopped running most of the cases
+would otherwise look exactly like a pass.
 
 **7-Zip and unRAR ship no test suite at all.** That is why `tests/` exists, and
 why its fuzzing is aimed hardest at those two: they have the largest parsing
@@ -452,8 +469,14 @@ than content-addressed image digests.
 | XZ Utils source | 5.8.3 | `fff1ffcf2b0da84d308a14de513a1aa23d4e9aa3464d17e64b9714bfdd0bbfb6` |
 | Zstandard source | 1.5.7 | `eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3` |
 | curl source | 8.19.0 | `4eb41489790d19e190d7ac7e18e82857cdd68af8f4e66b292ced562d333f11df` |
+| GNU Wget source | 1.25.0 | `766e48423e79359ea31e41db9e5c289675947a7fcf2efdcedb726ac9d0da3784` |
 | OpenSSL source | 3.5.7 | `a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8` |
 | zlib source | 1.3.1 | `9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23` |
+| libunistring source | 1.4.2 | `5b46e74377ed7409c5b75e7a96f95377b095623b689d8522620927964a41499c` |
+| libidn2 source | 2.3.8 | `f557911bf6171621e1f72ff35f5b1825bb35b52ed45325dcdee931e5d3c0787a` |
+| libpsl source | 0.23.0 | `f39b9631b3d369a21259ea4654f8875c0ec6995ce9551c0eb5d423e4c011f911` |
+| PCRE2 source | 10.47 | `c08ae2388ef333e8403e670ad70c0a11f1eed021fd88308d7e02f596fcd9dc16` |
+| c-ares source | 1.34.8 | `c222b6d681096f9444d2c4863d2c1174019e27cacca0a4a5c114d36dd7d7bf78` |
 
 The Dockerfile frontend, Ubuntu base image, and Ubuntu packages installed in
 the builder are not pinned to immutable digests or a snapshot repository. They
@@ -490,6 +513,13 @@ RAR compression algorithm. Review `out/licenses/` before redistribution.
   of changes for constant-time guarantees that this build does not apply; the
   library is functionally correct without them, but side-channel resistance in
   some primitives is weaker than upstream OpenSSL.
+- wget is built with almost every feature: HTTPS via OpenSSL, gzip via zlib,
+  internationalized URLs via libidn2, Public Suffix List cookie checking via
+  libpsl, PCRE2 regular expressions, asynchronous DNS via c-ares, NTLM, digest
+  and opie authentication, IPv6, and WARC output. Metalink is the one feature
+  left off: it needs GPGME to verify signatures, and GPGME is not among the
+  libraries ported to Fil-C. NLS is also off, as it is for curl. wget shares
+  curl's no-assembly OpenSSL and the throughput and side-channel caveats above.
 
 ## Runtime limitations
 
@@ -569,6 +599,8 @@ recovery.
 ├── unrar/
 │   ├── Dockerfile
 │   └── patches/
+├── wget/
+│   └── Dockerfile
 ├── xz/
 │   └── Dockerfile
 ├── zstd/
