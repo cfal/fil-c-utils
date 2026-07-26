@@ -1,0 +1,60 @@
+name: versions
+
+# When a pull request is opened, check every pinned upstream version against
+# its latest release. If any pin is behind, or could not be checked, post the
+# report as a comment on the pull request. This never fails the workflow: a
+# dependency falling behind is worth surfacing to a reviewer, but it is not a
+# reason to block a change that touches none of it.
+#
+# check-versions.py reports every component before returning, so one
+# unreachable upstream cannot hide a stale pin behind it.
+
+on:
+  pull_request:
+    types: [opened]
+
+permissions:
+  contents: read        # checkout
+  pull-requests: write  # post the comment
+
+jobs:
+  check:
+    name: check upstream versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check versions and comment if any are behind
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          # A zero exit means every pin is current; there is nothing to say.
+          if report="$(python3 check-versions.py)"; then
+            echo 'all pins are current'
+            echo "${report}"
+            exit 0
+          fi
+
+          echo "${report}"
+          {
+            echo '## Dependency freshness'
+            echo
+            echo 'One or more pinned versions are behind their latest upstream'
+            echo 'release, or could not be checked. This is informational and does'
+            echo 'not block the pull request.'
+            echo
+            echo '```'
+            echo "${report}"
+            echo '```'
+            echo
+            echo "Bump the version and checksum in the utility's \`Dockerfile\`; see"
+            echo '"Updating a dependency" in the README.'
+          } > comment.md
+
+          # A pull request from a fork gets a read-only token and cannot be
+          # commented on; that must not fail the workflow either.
+          gh pr comment "${PR}" --repo "${REPO}" --body-file comment.md \
+            || echo 'could not post the comment (a forked pull request has a read-only token)'

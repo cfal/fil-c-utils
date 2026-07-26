@@ -549,9 +549,11 @@ recovery.
 ├── .gitignore
 ├── README.md
 ├── build-all.sh
+├── check-versions.py
 ├── .github/workflows/
 │   ├── ci.yml
-│   └── build.yml
+│   ├── build.yml
+│   └── versions.yml
 ├── 7z/
 │   ├── Dockerfile
 │   └── patches/
@@ -627,6 +629,48 @@ The release job is the only one granted `contents: write`, and it hangs off the
 bundle, which hangs off the test suite. A tag cannot produce a release whose
 binaries failed the suite. It re-verifies the checksum after downloading the
 artifact rather than trusting the round trip through artifact storage.
+
+### Version freshness
+
+`versions.yml` runs when a pull request is opened and checks every pinned
+upstream version against its latest release. If any pin is behind, it posts the
+report as a comment on the pull request. It never fails the workflow: a
+dependency falling behind is worth putting in front of a reviewer, but it is
+not a reason to block a change that touches none of it. When every pin is
+current it stays silent.
+
+It runs `check-versions.py`, which reads each pin from its Dockerfile, asks each
+upstream for its newest release, and prints one row per component:
+
+```text
+component  pinned     latest     status
+7z         26.02      26.02      ok
+...
+curl       8.19.0     8.21.0     OUTDATED
+```
+
+Every upstream has a different release source, so the sources are queried
+differently: GitHub releases for 7-Zip, XZ, Zstandard, curl, and OpenSSL; the
+GNU FTP listing for tar and gzip; sourceware for bzip2; rarlab for unRAR; and
+zlib.net for zlib. The curl build's bundled OpenSSL and zlib are checked too.
+
+The check never stops at the first problem. A component whose upstream is
+unreachable, or whose listing has changed shape, is reported as an error and
+the walk continues, so a single flaky host cannot hide a stale pin behind it.
+It runs locally the same way, where it does exit nonzero if anything is behind,
+so it works as a plain command as well as a source of comment text:
+
+```sh
+python3 check-versions.py
+```
+
+Two caveats. OpenSSL maintains several release branches in parallel (a 3.5.x
+alongside a 4.0.x, for instance) and marks the newest of each as a release, so
+"latest" here means the highest version overall; a pin deliberately tracking an
+older branch will read as `OUTDATED`. Fil-C itself is not checked: it is the
+toolchain rather than a utility, and moving it is a larger decision than a pin
+bump. A pull request opened from a fork gets a read-only token and cannot be
+commented on; the check still runs and prints its report to the workflow log.
 
 ### Build design
 
@@ -739,6 +783,10 @@ assembly block and several optional alignment blocks that do not honor
 existing portable C implementation.
 
 ### Updating a dependency
+
+Run `python3 check-versions.py` to see which pins are behind; the `versions`
+workflow runs the same check when a pull request is opened and comments if any
+are.
 
 1. Change the version and checksum arguments near the top of its Dockerfile.
 2. Download the release from the authoritative upstream location and calculate
