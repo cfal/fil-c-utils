@@ -1,13 +1,13 @@
 name: build
 
-# Compiles the seven utilities and uploads one tarball per utility.
+# Compiles every utility and uploads one tarball per utility.
 #
 # This workflow is only ever called by another one (ci.yml), or run by hand.
 # It stops at the per-utility trees deliberately: merging them into a publish-
 # able bundle happens in ci.yml, after the test suite has passed.
 #
 # The utilities build independently, so they run as a matrix. Wall time is the
-# slowest single build rather than the sum of all seven.
+# slowest single build rather than the sum of them all.
 
 on:
   workflow_call:
