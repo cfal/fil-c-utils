@@ -91,7 +91,15 @@ They can run directly from `out/`:
 ./out/bzip2 -dc file.bz2
 ./out/xz -dc file.xz
 ./out/zstd -dc file.zst
+./out/curl -sSL https://example.com/ -o page.html
 ```
+
+curl verifies certificates against `/etc/ssl/certs/ca-certificates.crt`, the
+path compiled in at build time, so it trusts whatever the host trusts and keeps
+benefiting from the host's certificate updates. Point it elsewhere with
+`--cacert`, `--capath`, or `CURL_CA_BUNDLE`. An environment with no bundle at
+that path, such as a scratch container or a distribution that keeps
+certificates elsewhere, has to supply one.
 
 Set `PLATFORM` to override the Docker platform. The pinned Fil-C release is
 currently provided only for `linux/amd64`:
@@ -150,9 +158,13 @@ docker run --rm -i filc-zstd -dc < file.zst > file
 ```
 
 These images have no shell, package manager, or dynamic loader. They contain
-the selected utility, command aliases, and license notices. The curl image is
-self-contained even for HTTPS, because its CA bundle is compiled into the
-executable rather than read from disk.
+the selected utility, command aliases, and license notices. The curl image has
+no CA bundle either, so HTTPS needs one supplied:
+
+```sh
+docker run --rm -v /etc/ssl/certs/ca-certificates.crt:/ca.pem:ro \
+    filc-curl --cacert /ca.pem https://example.com/
+```
 
 ## Checking an artifact
 
@@ -174,10 +186,17 @@ check.
 
 ## Robustness testing
 
-The per-utility Dockerfiles run smoke tests against known-good inputs. The
-suite in `tests/` goes further: it checks that the binaries in `out/` handle
-correct data exactly, refuse hostile data safely, and survive corrupt data
-without a memory-safety failure.
+The per-utility Dockerfiles run smoke tests against known-good inputs. curl is
+the exception: its Dockerfile runs curl's own test suite, and no artifact is
+produced unless every case passes. That suite builds its test servers with the
+same compiler, so Fil-C sits on both ends of every connection, and `stunnel4`
+is installed so the HTTPS cases run rather than skipping. The build also places
+a floor under how many cases ran, since a configuration change that quietly
+skipped most of the suite would otherwise look like a pass.
+
+The suite in `tests/` covers the archive utilities. It checks that the binaries
+in `out/` handle correct data exactly, refuse hostile data safely, and survive
+corrupt data without a memory-safety failure.
 
 ```sh
 ./tests/run-tests.sh            # all stages
@@ -658,13 +677,13 @@ curl needs the same libtool treatment as XZ, for the same reason: a plain
 `make` time is what produces the static PIE. Overriding `LDFLAGS` there
 replaces what configure recorded, so `-L/deps/lib` has to be repeated.
 
-`--with-ca-embed` compiles the CA bundle into the executable, so the artifact
-verifies certificates with no files on disk. The build asserts the certificates
-are present by counting `BEGIN CERTIFICATE` blocks in the binary. Its TLS test
-runs against an `openssl s_server` this build produced, so it needs no network,
-and it checks both directions: a trusted chain must succeed and an untrusted
-one must fail, since a client that verifies nothing would otherwise look
-healthy.
+The CA bundle is not embedded. curl's `--with-ca-embed` would compile a copy
+into the executable, but it prefers that copy over the system store rather than
+falling back to it, so a host's certificate updates would stop applying. A
+build that embeds the bundle also fails 28 of curl's own tests, which compare
+verbose stderr byte for byte and see its `Using embedded CA bundle` note.
+Reading the platform's store avoids both, at the cost of needing a bundle
+supplied where the platform has none.
 
 Zstandard is built with `ZSTD_NO_ASM=1`. Version 1.5.7 has one pointer-returning
 assembly block and several optional alignment blocks that do not honor

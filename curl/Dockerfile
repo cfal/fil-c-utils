@@ -35,6 +35,7 @@ RUN apt-get update \
         patchelf \
         perl \
         pkg-config \
+        stunnel4 \
         xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
@@ -107,9 +108,12 @@ RUN curl -fsSLo /tmp/curl.tar.xz \
     && tar --strip-components=1 -xJf /tmp/curl.tar.xz \
     && rm /tmp/curl.tar.xz
 
-# --with-ca-embed compiles the CA bundle into the executable, so the artifact
-# verifies certificates with no files on disk at all. --with-ca-bundle keeps the
-# conventional path usable as a runtime override.
+# The CA bundle is read from the platform rather than embedded. curl's
+# --with-ca-embed would compile a copy into the executable and then prefer it
+# over the system store instead of falling back to it, so a host's certificate
+# updates would stop applying. The cost is that an environment without a bundle
+# at this path, such as a scratch container, has to be given one with --cacert,
+# CURL_CA_BUNDLE, or a mounted file.
 RUN PKG_CONFIG_PATH=/deps/lib/pkgconfig \
     CC=/opt/filc/build/bin/clang \
     CFLAGS="-O2 -g" \
@@ -120,7 +124,6 @@ RUN PKG_CONFIG_PATH=/deps/lib/pkgconfig \
         --with-openssl=/deps \
         --with-zlib=/deps \
         --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt \
-        --with-ca-embed=/etc/ssl/certs/ca-certificates.crt \
         --without-libpsl \
         --without-libidn2 \
         --without-nghttp2 \
@@ -147,36 +150,30 @@ RUN binary=/src/src/curl \
     && "${binary}" --version > /tmp/curl.version \
     && grep -Fq "${CURL_VERSION}" /tmp/curl.version \
     && grep -Fq "OpenSSL/${OPENSSL_VERSION}" /tmp/curl.version \
-    && grep -Fq "zlib/${ZLIB_VERSION}" /tmp/curl.version \
-    && test "$(grep -c 'BEGIN CERTIFICATE' /tmp/curl.strings)" -ge 100
+    && grep -Fq "zlib/${ZLIB_VERSION}" /tmp/curl.version
 
-# The TLS path is tested against a server this build produced, so the check
-# needs no network and cannot pass because of an accident of the environment.
-# Both directions matter: a trusted chain has to succeed, and an untrusted one
-# has to fail, or the artifact would appear to work while verifying nothing.
+# curl's own test suite is the gate: no artifact is produced unless it passes.
+# The suite's servers are built with the same compiler, so Fil-C sits on both
+# ends of every connection rather than only on the client.
+#
+# stunnel is what makes the TLS cases runnable. Without it curl's suite skips
+# 62 HTTPS tests and still reports success, which for a network client would
+# leave the most important paths untested while looking healthy.
+#
+# The run is checked two ways. runtests.pl must succeed, and a floor is placed
+# under the number of cases that actually ran, because a configuration change
+# that quietly skips most of the suite would otherwise pass this step.
 RUN set -e; \
-    /deps/bin/openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
-        -subj "/CN=localhost" -keyout /tmp/key.pem -out /tmp/cert.pem 2>/dev/null; \
-    /deps/bin/openssl s_server -www -quiet -port 4433 \
-        -cert /tmp/cert.pem -key /tmp/key.pem & \
-    server=$!; \
-    trusted=no; \
-    for _ in $(seq 1 40); do \
-        if /src/src/curl -sS --cacert /tmp/cert.pem https://localhost:4433/ \
-                > /tmp/tls.out 2>/dev/null; then \
-            trusted=yes; \
-            break; \
-        fi; \
-        sleep 0.25; \
-    done; \
-    untrusted=accepted; \
-    /src/src/curl -sS https://localhost:4433/ > /dev/null 2>&1 || untrusted=rejected; \
-    kill "${server}" 2>/dev/null || true; \
-    test "${trusted}" = yes; \
-    grep -Fq "s_server" /tmp/tls.out; \
-    test "${untrusted}" = rejected; \
-    printf 'file protocol\n' > /tmp/local.txt; \
-    /src/src/curl -sS "file:///tmp/local.txt" | grep -Fq "file protocol"
+    make -C tests LDFLAGS="-Wc,-static -L/deps/lib" > /tmp/curl-tests-build.log 2>&1; \
+    cd tests; \
+    if ! ./runtests.pl -n -a -j"$(nproc)" > /tmp/curl-tests.log 2>&1; then \
+        tail -40 /tmp/curl-tests.log; \
+        exit 1; \
+    fi; \
+    tail -2 /tmp/curl-tests.log; \
+    ran="$(sed -n 's/^TESTDONE: \([0-9][0-9]*\) tests out of.*/\1/p' /tmp/curl-tests.log | tail -1)"; \
+    echo "curl test cases run: ${ran}"; \
+    test "${ran}" -ge 1600
 
 RUN install -Dm755 src/curl /artifact/curl \
     && install -Dm644 COPYING /artifact/licenses/curl/COPYING \
@@ -192,7 +189,7 @@ ARG FILC_VERSION
 ARG CURL_VERSION
 
 LABEL org.opencontainers.image.title="curl compiled with Fil-C" \
-      org.opencontainers.image.description="Statically linked curl with Fil-C memory safety, OpenSSL and an embedded CA bundle" \
+      org.opencontainers.image.description="Statically linked curl with Fil-C memory safety and OpenSSL" \
       org.opencontainers.image.version="${CURL_VERSION}-filc${FILC_VERSION}" \
       org.opencontainers.image.source="https://github.com/curl/curl" \
       org.opencontainers.image.licenses="curl AND Apache-2.0 AND Zlib"
