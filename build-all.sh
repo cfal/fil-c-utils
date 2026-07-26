@@ -5,7 +5,7 @@ set -euo pipefail
 readonly ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly OUT_DIR="${ROOT_DIR}/out"
 readonly PLATFORM="${PLATFORM:-linux/amd64}"
-readonly UTILITIES=(7z unrar tar gzip bzip2 xz zstd curl wget)
+readonly UTILITIES=(7z unrar tar gzip bzip2 xz zstd curl wget nano)
 readonly EXECUTABLES=(
     7z
     7zz
@@ -29,6 +29,7 @@ readonly EXECUTABLES=(
     zstdcat
     curl
     wget
+    nano
 )
 
 # Anything that needs these lists should ask for them rather than keeping its
