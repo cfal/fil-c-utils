@@ -18,10 +18,12 @@ Included utilities:
 | Zstandard | `zstd`, `unzstd`, `zstdcat` |
 | curl | `curl` |
 | GNU Wget | `wget` |
+| GNU nano | `nano` |
 
-Every utility here reads untrusted input: seven of them parse archives, and
-curl and wget speak to the network. Fil-C turns spatial and temporal memory-safety
-violations into deterministic process failures. That is useful defense in depth for programs that process
+Every utility here reads untrusted input: seven of them parse archives, curl
+and wget speak to the network, and nano opens whatever file it is pointed at.
+Fil-C turns spatial and temporal memory-safety violations into deterministic
+process failures. That is useful defense in depth for programs that process
 untrusted archives. It does not replace sandboxing, least privilege, archive
 size limits, path validation, or timely dependency updates.
 
@@ -41,7 +43,7 @@ Build everything:
 ./build-all.sh
 ```
 
-The script stages all nine builds and replaces `out/` only after every build
+The script stages all builds and replaces `out/` only after every one
 has succeeded. The tree has two directories, one for executables and one
 for license notices:
 
@@ -59,6 +61,7 @@ out/
 │   ├── gzip
 │   ├── lzcat -> xz
 │   ├── lzma -> xz
+│   ├── nano
 │   ├── tar
 │   ├── unrar
 │   ├── unlzma -> xz
@@ -75,11 +78,14 @@ out/
     ├── bzip2/
     ├── c-ares/
     ├── curl/
+    ├── file/
     ├── fil-c/
     ├── gzip/
     ├── libidn2/
     ├── libpsl/
     ├── libunistring/
+    ├── nano/
+    ├── ncurses/
     ├── openssl/
     ├── pcre2/
     ├── tar/
@@ -103,6 +109,7 @@ They can run directly from `out/`:
 ./out/bin/zstd -dc file.zst
 ./out/bin/curl -sSL https://example.com/ -o page.html
 ./out/bin/wget -qO page.html https://example.com/
+./out/bin/nano notes.txt
 ```
 
 curl and wget both verify certificates against
@@ -113,6 +120,15 @@ certificate updates. Point curl elsewhere with `--cacert`, `--capath`, or
 `SSL_CERT_FILE`. An environment with no bundle at that path, such as a scratch
 container or a distribution that keeps certificates elsewhere, has to supply
 one.
+
+nano carries a set of common terminal descriptions compiled into it, so it
+drives a terminal with no terminfo database on disk. Its optional runtime data
+uses standard host paths: syntax highlighting reads `/etc/nanorc` and
+`/usr/share/nano`, and content-based type detection reads
+`/usr/share/misc/magic.mgc`. A host with nano and `file` installed supplies
+these; where they are absent nano runs without those two extras. Editing,
+UTF-8, mouse, multiple buffers, and the spell and lint hooks do not depend on
+them.
 
 Set `PLATFORM` to override the Docker platform. The pinned Fil-C release is
 currently provided only for `linux/amd64`:
@@ -158,7 +174,8 @@ docker build \
   ./gzip
 ```
 
-Replace `gzip` with `7z`, `unrar`, `tar`, `bzip2`, `xz`, `zstd`, `curl`, or `wget`. Docker
+Replace `gzip` with `7z`, `unrar`, `tar`, `bzip2`, `xz`, `zstd`, `curl`, `wget`,
+or `nano`. Docker
 merges an individual artifact tree into an existing destination, so old files
 may remain. `build-all.sh` avoids that ambiguity by staging every build and
 replacing `out/` transactionally.
@@ -248,11 +265,19 @@ delicate, and every one of them runs against the Fil-C binary.
 | bzip2 | 3 sample round trips | pass |
 | 7-Zip | **none ships** | — |
 | unRAR | **none ships** | — |
+| GNU nano | **none ships** | pseudo-terminal edit-and-save |
 
 Nothing needed to be excluded or marked expected-to-fail: Fil-C causes no
 failures in any of them. Skipped cases are features these builds do not enable,
 such as HTTP/2 and IDN for curl, or tests needing root for tar. Wget's two
 skips are one web-of-trust HTTPS case and one proxy-environment test.
+
+nano's release ships no test suite and the program has no batch mode, so its
+gate is to drive the real binary through a pseudo-terminal: type a line, save
+it with `^O`, exit with `^X`, and check the file holds exactly those bytes. The
+harness points the terminfo path at a directory that does not exist, so a pass
+also proves the terminal descriptions compiled into the binary are what let it
+run where the scratch image has no terminfo on disk.
 
 Three details are easy to get wrong. curl's suite silently skips its 62 HTTPS
 cases unless `stunnel4` is installed, and zstd's re-links the CLI, so it needs
@@ -496,6 +521,9 @@ than content-addressed image digests.
 | libpsl source | 0.23.0 | `f39b9631b3d369a21259ea4654f8875c0ec6995ce9551c0eb5d423e4c011f911` |
 | PCRE2 source | 10.47 | `c08ae2388ef333e8403e670ad70c0a11f1eed021fd88308d7e02f596fcd9dc16` |
 | c-ares source | 1.34.8 | `c222b6d681096f9444d2c4863d2c1174019e27cacca0a4a5c114d36dd7d7bf78` |
+| GNU nano source | 9.1 | `5f47764274cb7532349ce0aa20ec10f1e8e851a6e9fa3eb66812c43d196db042` |
+| ncurses source | 6.6 | `355b4cbbed880b0381a04c46617b7656e362585d52e9cf84a67e2009b749ff11` |
+| file source | 5.46 | `c9cc77c7c560c543135edc555af609d5619dbef011997e988ce40a3d75d86088` |
 
 The Dockerfile frontend, Ubuntu base image, and Ubuntu packages installed in
 the builder are not pinned to immutable digests or a snapshot repository. They
@@ -612,6 +640,9 @@ recovery.
 │   └── Dockerfile
 ├── gzip/
 │   └── Dockerfile
+├── nano/
+│   ├── Dockerfile
+│   └── smoke.c
 ├── tar/
 │   ├── Dockerfile
 │   └── patches/
@@ -832,6 +863,25 @@ Zstandard is built with `ZSTD_NO_ASM=1`. Version 1.5.7 has one pointer-returning
 assembly block and several optional alignment blocks that do not honor
 `ZSTD_DISABLE_ASM`, so the local patch extends those guards and selects the
 existing portable C implementation.
+
+nano is the second utility with dependencies, and like curl it builds them with
+the same compiler into a shared `/deps` prefix: ncurses for the terminal and
+libmagic, from the `file` project, for content-based syntax detection. Both are
+on Fil-C's list of programs that build unchanged, and neither needed a patch.
+ncurses is built widec, for UTF-8, and split with `--with-termlib` so the
+terminfo half is its own library. The setting that matters is
+`--with-fallbacks`: it compiles a set of common terminal descriptions
+(`xterm`, `linux`, `vt100`, `screen`, `tmux` and others) into the library. A
+scratch image carries no terminfo database, so without them nano could not
+drive any terminal at all, and the smoke test enforces this by running with the
+terminfo path pointed at nothing. libmagic is configured with
+`--datadir=/usr/share` so the database path compiled into it is the platform
+standard `/usr/share/misc/magic`, the same host-path approach curl uses for its
+CA bundle. Every one of nano's features is on by default, so no feature flags
+are needed beyond `--enable-utf8`; the build asserts `ENABLE_UTF8` and
+`HAVE_LIBMAGIC` in `config.h` rather than trusting configure to have found the
+library. Only nano's `lib` and `src` directories are built, which skips the
+documentation step and its `makeinfo` requirement.
 
 ### Updating a dependency
 
