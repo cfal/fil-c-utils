@@ -102,13 +102,35 @@ RUN binary=/src/CPP/7zip/Bundles/Alone2/_o/7zz \
     && "${binary}" x -o/tmp/smoke/output /tmp/smoke/archive.7z \
     && cmp /tmp/smoke/input/readme.txt /tmp/smoke/output/readme.txt
 
-RUN install -Dm755 CPP/7zip/Bundles/Alone2/_o/7zz /artifact/7z \
-    && ln -s 7z /artifact/7zz \
+RUN install -Dm755 CPP/7zip/Bundles/Alone2/_o/7zz /artifact/bin/7z \
+    && ln -s 7z /artifact/bin/7zz \
     && install -Dm644 DOC/License.txt /artifact/licenses/7zip/License.txt \
     && install -Dm644 DOC/unRarLicense.txt /artifact/licenses/7zip/unRarLicense.txt \
     && install -Dm644 /opt/filc/LLVM-LICENSE.txt /artifact/licenses/fil-c/LLVM-LICENSE.txt \
     && install -Dm644 /opt/filc/MUSL-LICENSE.txt /artifact/licenses/fil-c/MUSL-LICENSE.txt \
     && install -Dm644 /opt/filc/PAS-LICENSE.txt /artifact/licenses/fil-c/PAS-LICENSE.txt
+
+# Executables are built with -g so the checks above can read DWARF. The shipped
+# copies drop it: debug information is most of their size and is recoverable by
+# rebuilding. Fil-C keeps its own metadata for panic reports, so a stripped
+# binary still names the file, line and function that failed.
+#
+# --strip-debug rather than a full strip, which would also discard .symtab and
+# with it the pizlonated and filc_* symbols. Those are how anyone holding the
+# artifact can tell it was built with Fil-C at all, and they cost about 7% of
+# the size that a full strip would save.
+RUN strip --strip-debug /artifact/bin/* \
+    && for f in /artifact/bin/*; do \
+        test -L "${f}" && continue; \
+        readelf -SW "${f}" > /tmp/art.sections; \
+        grep -Fq ".debug_info" /tmp/art.sections && exit 1; \
+        readelf -sW "${f}" > /tmp/art.symbols; \
+        grep -Fq "pizlonated" /tmp/art.symbols || exit 1; \
+        grep -Eq "filc_call_user_main|zgc_alloc" /tmp/art.symbols || exit 1; \
+        file "${f}" > /tmp/art.desc; \
+        grep -Fq "static-pie linked" /tmp/art.desc || exit 1; \
+    done \
+    && echo "artifact binaries stripped of debug info, Fil-C symbols retained"
 
 FROM scratch AS artifact
 
@@ -123,4 +145,4 @@ LABEL org.opencontainers.image.title="7-Zip compiled with Fil-C" \
 
 COPY --from=build /artifact/ /
 
-ENTRYPOINT ["/7z"]
+ENTRYPOINT ["/bin/7z"]

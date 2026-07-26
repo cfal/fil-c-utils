@@ -41,31 +41,33 @@ Build everything:
 ```
 
 The script stages all eight builds and replaces `out/` only after every build
-has succeeded. Binaries are flat; only license notices use subdirectories:
+has succeeded. The tree has two directories, one for executables and one
+for license notices:
 
 ```text
 out/
-├── 7z
-├── 7zz -> 7z
-├── bunzip2 -> bzip2
-├── bzcat -> bzip2
-├── bzip2
-├── bzip2recover
-├── curl
-├── gunzip -> gzip
-├── gzip
-├── lzcat -> xz
-├── lzma -> xz
-├── tar
-├── unrar
-├── unlzma -> xz
-├── unxz -> xz
-├── unzstd -> zstd
-├── xz
-├── xzcat -> xz
-├── zcat -> gzip
-├── zstd
-├── zstdcat -> zstd
+├── bin/
+│   ├── 7z
+│   ├── 7zz -> 7z
+│   ├── bunzip2 -> bzip2
+│   ├── bzcat -> bzip2
+│   ├── bzip2
+│   ├── bzip2recover
+│   ├── curl
+│   ├── gunzip -> gzip
+│   ├── gzip
+│   ├── lzcat -> xz
+│   ├── lzma -> xz
+│   ├── tar
+│   ├── unrar
+│   ├── unlzma -> xz
+│   ├── unxz -> xz
+│   ├── unzstd -> zstd
+│   ├── xz
+│   ├── xzcat -> xz
+│   ├── zcat -> gzip
+│   ├── zstd
+│   └── zstdcat -> zstd
 └── licenses/
     ├── 7zip/
     ├── bzip2/
@@ -84,14 +86,14 @@ The executables are x86-64 static PIEs and have no ELF program interpreter.
 They can run directly from `out/`:
 
 ```sh
-./out/7z t archive.7z
-./out/unrar t archive.rar
-./out/tar -tf archive.tar
-./out/gzip -dc file.gz
-./out/bzip2 -dc file.bz2
-./out/xz -dc file.xz
-./out/zstd -dc file.zst
-./out/curl -sSL https://example.com/ -o page.html
+./out/bin/7z t archive.7z
+./out/bin/unrar t archive.rar
+./out/bin/tar -tf archive.tar
+./out/bin/gzip -dc file.gz
+./out/bin/bzip2 -dc file.bz2
+./out/bin/xz -dc file.xz
+./out/bin/zstd -dc file.zst
+./out/bin/curl -sSL https://example.com/ -o page.html
 ```
 
 curl verifies certificates against `/etc/ssl/certs/ca-certificates.crt`, the
@@ -115,10 +117,10 @@ Instead, it starts the appropriate command by name. Put this repository's
 `out/` first in `PATH` so tar finds the Fil-C build before a system copy:
 
 ```sh
-PATH="$PWD/out:$PATH" ./out/tar -czf source.tar.gz source/
-PATH="$PWD/out:$PATH" ./out/tar -cjf source.tar.bz2 source/
-PATH="$PWD/out:$PATH" ./out/tar -cJf source.tar.xz source/
-PATH="$PWD/out:$PATH" ./out/tar --zstd -cf source.tar.zst source/
+PATH="$PWD/out/bin:$PATH" ./out/bin/tar -czf source.tar.gz source/
+PATH="$PWD/out/bin:$PATH" ./out/bin/tar -cjf source.tar.bz2 source/
+PATH="$PWD/out/bin:$PATH" ./out/bin/tar -cJf source.tar.xz source/
+PATH="$PWD/out/bin:$PATH" ./out/bin/tar --zstd -cf source.tar.zst source/
 ```
 
 The same rule applies while extracting. The tar Dockerfile deliberately
@@ -126,7 +128,7 @@ configures the helper names as `gzip`, `bzip2`, `xz`, and `zstd`, so ordinary
 `PATH` lookup is sufficient. You can also select a helper explicitly:
 
 ```sh
-./out/tar --use-compress-program="$PWD/out/zstd" -xf source.tar.zst
+./out/bin/tar --use-compress-program="$PWD/out/bin/zstd" -xf source.tar.zst
 ```
 
 The standalone `tar` scratch image contains only `tar`; it cannot process a
@@ -168,21 +170,37 @@ docker run --rm -v /etc/ssl/certs/ca-certificates.crt:/ca.pem:ro \
 
 ## Checking an artifact
 
-The Dockerfiles reject an artifact unless it is static, contains debug
-information, has Fil-C symbols, and passes a round-trip smoke test. You can
-inspect a built binary yourself:
+The Dockerfiles reject an artifact unless it is static, has Fil-C symbols, and
+passes the project's tests. You can inspect a built binary yourself:
 
 ```sh
-file out/tar
-readelf -lW out/tar | grep INTERP
-readelf -sW out/tar | grep -m1 pizlonated
-readelf -sW out/tar | grep -Em1 'filc_call_user_main|zgc_alloc'
+file out/bin/tar
+readelf -lW out/bin/tar | grep INTERP
+readelf -sW out/bin/tar | grep -m1 pizlonated
+readelf -sW out/bin/tar | grep -Em1 'filc_call_user_main|zgc_alloc'
 ```
 
 `file` should say `static-pie linked`. The `INTERP` command should print
 nothing and exit nonzero. The symbol commands should find Fil-C-transformed
 names and a Fil-C runtime symbol. `ldd` alone is not a sufficient provenance
 check.
+
+Shipped executables are built with `-g` and then stripped of debug information,
+which is most of their size and is recoverable by rebuilding. `--strip-debug`
+is used rather than a full strip so `.symtab` survives, since the two symbol
+commands above are how anyone holding an artifact can tell it was built with
+Fil-C. Fil-C keeps its own metadata for panic reports, so a stripped binary
+still names the file, line and function that failed:
+
+```text
+filc safety error: cannot write pointer with ptr >= upper.
+    /tmp/oob.c:3:41: inner (inlined)
+    /tmp/oob.c:4:61: outer (inlined)
+```
+
+The one thing stripping does cost is the `alignment` stage in `tests/`, which
+reads DWARF. Run it against an unstripped build, `--target build`, rather than
+against `out/`; it reports that it could not scan rather than passing.
 
 ## Robustness testing
 
@@ -311,7 +329,7 @@ are failures, and their inputs are written to the findings directory so they
 can be replayed against a rebuilt binary:
 
 ```sh
-./out/unrar t -y "${TMPDIR:-/tmp}/fil-c-utils-tests/findings/FILC-unrar-..."
+./out/bin/unrar t -y "${TMPDIR:-/tmp}/fil-c-utils-tests/findings/FILC-unrar-..."
 ```
 
 `OOM` and `HUGE` are reported separately rather than counted as failures. Both

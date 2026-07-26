@@ -62,12 +62,21 @@ do_alignment() {
         [[ -f "$b" && -x "$b" && ! -L "$b" ]] && bins+=("$b")
     done
     local report="${WORK_DIR}/alignment.txt"
-    if ! python3 "${TESTS_DIR}/scan-alignment.py" "${bins[@]}" > "${report}"; then
-        cat "${report}"
-        printf 'FAIL: could not read DWARF from the executables\n'
+    local status=0
+    python3 "${TESTS_DIR}/scan-alignment.py" "${bins[@]}" > "${report}" || status=$?
+    cat "${report}"
+    # Exit 2 means the binaries carry no DWARF, which shipped artifacts do not:
+    # they are stripped of debug info. Reporting that as a pass would be the
+    # worst outcome, since the scan would have examined nothing, so it is called
+    # out instead. The intrinsic half of the scan still ran.
+    if [[ "${status}" -eq 2 ]]; then
+        printf 'NOT SCANNED: these binaries are stripped, so the alignment half of\n'
+        printf '             this stage examined nothing. Build with --target build\n'
+        printf '             and point FILC_OUT at it to run it for real.\n'
+    elif [[ "${status}" -ne 0 ]]; then
+        printf 'FAIL: the scan could not run\n'
         return 1
     fi
-    cat "${report}"
     if grep -q 'misaligned pointer field' "${report}"; then
         printf 'FAIL: rebuild the affected utility; its Fil-C patch is not in effect\n'
         return 1
@@ -76,6 +85,10 @@ do_alignment() {
         printf 'FAIL: an intrinsic Fil-C cannot lower is compiled in. It aborts on\n'
         printf '      any CPU whose features select that path, whatever this one does.\n'
         return 1
+    fi
+    if [[ "${status}" -eq 2 ]]; then
+        printf 'PARTIAL: no unhandled intrinsics; alignment needs an unstripped build\n'
+        return 0
     fi
     printf 'PASS: no unaligned pointer fields, no unhandled intrinsics\n'
 }

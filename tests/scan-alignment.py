@@ -115,14 +115,36 @@ def unhandled_intrinsics(binary):
     return sorted({m.decode() for m in INTRINSIC.findall(binary.read_bytes())})
 
 
+def has_dwarf(binary):
+    """Whether the binary still carries the debug info this scan reads.
+
+    A stripped binary yields no DIEs, so every pass below finds nothing and the
+    scan would report `clean` while having examined no structure at all. That
+    is the one result this must never produce, so absence of DWARF is reported
+    as its own outcome rather than as success.
+    """
+    p = subprocess.run(["readelf", "--debug-dump=info", str(binary)],
+                       capture_output=True, text=True, errors="replace")
+    return "DW_TAG_" in p.stdout
+
+
+NO_DEBUG_INFO = 2
+
+
 def main():
     findings = 0
+    stripped = []
     for b in sys.argv[1:]:
         p = Path(b)
         if p.is_symlink() or not p.is_file():
             continue
 
-        misaligned = sorted(set(scan(p)))
+        # The intrinsic check reads raw bytes, so it still works on a stripped
+        # binary. Only the alignment scan needs DWARF.
+        scannable = has_dwarf(p)
+        if not scannable:
+            stripped.append(p.name)
+        misaligned = sorted(set(scan(p))) if scannable else []
         intrinsics = unhandled_intrinsics(p)
 
         notes = []
@@ -132,11 +154,20 @@ def main():
             notes.append(f"{len(intrinsics)} unhandled intrinsic(s)")
         findings += len(misaligned) + len(intrinsics)
 
+        if not scannable:
+            notes.append("no debug info, alignment not scanned")
         print(f"{p.name:<14} {', '.join(notes) if notes else 'clean'}")
         for s, mem, off in misaligned:
             print(f"                 {s}.{mem} @ offset {off}")
         for name in intrinsics:
             print(f"                 {name}")
+
+    if stripped:
+        print(f"\n{len(stripped)} binary(ies) carry no debug info, so nothing was "
+              f"scanned in them: {', '.join(stripped)}")
+        print("Scan an unstripped build instead, for example the Dockerfile's "
+              "`build` stage, which keeps DWARF.")
+        return NO_DEBUG_INFO
     return 0
 
 

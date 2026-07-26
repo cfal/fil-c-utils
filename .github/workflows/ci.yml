@@ -134,8 +134,8 @@ jobs:
           missing=0
           while read -r executable; do
             [ -n "${executable}" ] || continue
-            if [ ! -x "out/${executable}" ]; then
-              echo "missing or not executable: out/${executable}"
+            if [ ! -x "out/bin/${executable}" ]; then
+              echo "missing or not executable: out/bin/${executable}"
               missing=1
             fi
           done < <(./build-all.sh --list executables)
@@ -152,7 +152,7 @@ jobs:
           # Every real executable in the tree, so this needs no list of its own
           # and covers extras like bzip2recover. Symlinks are excluded because
           # they resolve to a binary already checked.
-          mapfile -t binaries < <(find out -maxdepth 1 -type f -executable | sort)
+          mapfile -t binaries < <(find out/bin -maxdepth 1 -type f -executable | sort)
           echo "checking ${#binaries[@]} binaries"
           for binary in "${binaries[@]}"; do
             file "${binary}" > /tmp/desc.txt

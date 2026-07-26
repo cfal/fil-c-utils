@@ -4,7 +4,7 @@
 TESTS_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname -- "${TESTS_DIR}")"
 
-: "${FILC_OUT:=${ROOT_DIR}/out}"
+: "${FILC_OUT:=${ROOT_DIR}/out/bin}"
 : "${WORK_DIR:=${TMPDIR:-/tmp}/fil-c-utils-tests}"
 
 SEED_DIR="${WORK_DIR}/seed"

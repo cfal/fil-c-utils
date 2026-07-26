@@ -80,7 +80,7 @@ for utility in "${UTILITIES[@]}"; do
 done
 
 for executable in "${EXECUTABLES[@]}"; do
-    test -x "${OUT_DIR}/${executable}"
+    test -x "${OUT_DIR}/bin/${executable}"
 done
 
 printf 'Fil-C utilities are available in %s\n' "${OUT_DIR}"
