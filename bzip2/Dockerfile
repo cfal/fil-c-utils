@@ -51,8 +51,8 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/bzip2.tar.gz \
     && tar --strip-components=1 -xzf /tmp/bzip2.tar.gz \
     && rm /tmp/bzip2.tar.gz
 
-COPY patches/0001-clear-errno-before-testing-it-after-getc.patch /tmp/bzip2-errno.patch
-RUN patch --batch --forward -p1 < /tmp/bzip2-errno.patch
+COPY patches/0001-use-ferror-not-errno-to-detect-read-errors.patch /tmp/bzip2-recover.patch
+RUN patch --batch --forward -p1 < /tmp/bzip2-recover.patch
 
 RUN make -j"$(nproc)" bzip2 bzip2recover \
         CC=/opt/filc/build/bin/clang \
@@ -80,10 +80,11 @@ RUN for binary in bzip2 bzip2recover; do \
     && cmp README /tmp/smoke.out
 
 # bzip2recover was built and checked for provenance but never run, which is how
-# it shipped unable to recover anything: it tests errno after a getc that
-# returned EOF, and on a clean end of file errno still holds whatever an earlier
-# call left there. Under glibc that happened to be zero. Running it here is what
-# makes the patch above verifiable.
+# it shipped unable to recover anything: after a getc returns EOF it tested
+# errno instead of the stream error indicator, and on musl errno still holds a
+# stale EINVAL at a clean end of file, so every archive looked like an I/O
+# error. Under glibc errno happened to be zero. Running it here is what makes
+# the patch above verifiable.
 RUN set -e; \
     cd /tmp; \
     /src/bzip2 -1 -c /src/README > recover-me.bz2; \

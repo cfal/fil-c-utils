@@ -1,0 +1,18 @@
+--- a/bzip2recover.c
++++ b/bzip2recover.c
+@@ -204,7 +204,14 @@
+    } else {
+       Int32 retVal = getc ( bs->handle );
+       if ( retVal == EOF ) {
+-         if (errno != 0) readError();
++         /* getc returns EOF for a clean end of file as well as for a read
++            error, and errno cannot tell the two apart: it is only meaningful
++            right after a call that failed, and getc leaves it untouched at a
++            clean EOF.  On a libc where an earlier call left errno non-zero
++            (musl leaves EINVAL here), this reported every archive as an I/O
++            error, so bzip2recover recovered nothing.  The stream error
++            indicator is exactly this distinction. */
++         if (ferror(bs->handle)) readError();
+          return 2;
+       }
+       bs->buffLive = 7;
