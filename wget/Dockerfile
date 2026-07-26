@@ -265,6 +265,16 @@ RUN binary=/src/src/wget \
 # release tarball, and their standalone driver calls dlsym at exit, which Fil-C
 # forbids in a static build. wget itself never takes that path.
 #
+# The HTTPS tests point their client at a server named WgetTestingServer, which
+# the suite maps to localhost through the HOSTALIASES environment variable.
+# HOSTALIASES is a glibc feature; musl, which this wget is built against,
+# ignores it, so the client cannot resolve the name and the eight HTTPS cases
+# fail wherever the harness's own glibc lets the server start. The build cannot
+# fix this from inside a RUN: /etc/hosts is read-only during a build. The name
+# is supplied instead with `docker build --add-host WgetTestingServer:127.0.0.1`,
+# which musl does honor; build-all.sh and the CI workflow pass it, and the
+# README notes it for a standalone build. Without it the eight cases fail here.
+#
 # Each suite must succeed and clear a floor on the number of cases that ran, so
 # a configuration change that quietly skips most of the suite cannot pass.
 RUN set -e; \
@@ -275,8 +285,8 @@ RUN set -e; \
     tp="$(sed -n 's/^# PASS: *\([0-9][0-9]*\)/\1/p' /tmp/wget-tests.log | tail -1)"; \
     ep="$(sed -n 's/^# PASS: *\([0-9][0-9]*\)/\1/p' /tmp/wget-testenv.log | tail -1)"; \
     echo "wget tests/ passed: ${tp}, testenv/ passed: ${ep}"; \
-    test "${tp:-0}" -ge 70; \
-    test "${ep:-0}" -ge 40
+    test "${tp:-0}" -ge 85; \
+    test "${ep:-0}" -ge 45
 
 RUN install -Dm755 src/wget /artifact/bin/wget \
     && install -Dm644 COPYING /artifact/licenses/wget/COPYING \

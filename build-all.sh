@@ -59,10 +59,19 @@ build_utility() {
     local context="$2"
     local destination="${STAGING_DIR}/${name}"
 
+    # wget's HTTPS test suite resolves a fixed hostname through glibc's
+    # HOSTALIASES, which the musl-built client ignores. Supplying the mapping
+    # through /etc/hosts, which musl reads, lets those tests run; the Dockerfile
+    # cannot do it itself because /etc/hosts is read-only during a build. The
+    # flag is harmless to every other utility, none of which resolve that name.
+    local add_host=""
+    [[ "${name}" == "wget" ]] && add_host="--add-host=WgetTestingServer:127.0.0.1"
+
     mkdir -p -- "${destination}"
 
     printf 'Building %s for %s...\n' "${name}" "${PLATFORM}"
     docker build \
+        ${add_host} \
         --platform "${PLATFORM}" \
         --target artifact \
         --output "type=local,dest=${destination}" \

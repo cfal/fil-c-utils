@@ -163,6 +163,23 @@ merges an individual artifact tree into an existing destination, so old files
 may remain. `build-all.sh` avoids that ambiguity by staging every build and
 replacing `out/` transactionally.
 
+wget is the one exception to a plain `docker build`. Its HTTPS test suite,
+which gates the build, resolves a fixed hostname that the musl-built client can
+only reach through `/etc/hosts`, and a Dockerfile cannot write `/etc/hosts`
+during a build. Add the mapping on the command line:
+
+```sh
+docker build \
+  --add-host=WgetTestingServer:127.0.0.1 \
+  --platform linux/amd64 \
+  --target artifact \
+  --output type=local,dest=out \
+  ./wget
+```
+
+`build-all.sh` and the CI workflow pass this automatically; only a hand-run
+`docker build ./wget` needs it.
+
 Each final stage is also a minimal runnable `scratch` image:
 
 ```sh
@@ -224,7 +241,7 @@ delicate, and every one of them runs against the Fil-C binary.
 | --- | --- | --- |
 | GNU tar | Autotest, 226 files | 208 pass, 36 skip |
 | curl | 1919 cases | 1675 pass, 244 skip |
-| GNU Wget | `tests/` + `testenv/`, 136 cases | 127 pass, 9 skip |
+| GNU Wget | `tests/` + `testenv/`, 136 cases | 134 pass, 2 skip |
 | gzip | 30 cases | 29 pass, 1 skip |
 | XZ Utils | 18 cases | 18 pass |
 | Zstandard | `playTests.sh` and fuzzers | all pass |
@@ -234,19 +251,21 @@ delicate, and every one of them runs against the Fil-C binary.
 
 Nothing needed to be excluded or marked expected-to-fail: Fil-C causes no
 failures in any of them. Skipped cases are features these builds do not enable,
-such as HTTP/2 and IDN for curl, or tests needing root for tar. Wget's nine
-skips are its HTTPS certificate-variation cases, which the harness can only run
-where it can generate throwaway certificates, plus one proxy-environment test.
+such as HTTP/2 and IDN for curl, or tests needing root for tar. Wget's two
+skips are one web-of-trust HTTPS case and one proxy-environment test.
 
-Two details are easy to get wrong. curl's suite silently skips its 62 HTTPS
+Three details are easy to get wrong. curl's suite silently skips its 62 HTTPS
 cases unless `stunnel4` is installed, and zstd's re-links the CLI, so it needs
 the same flags as the build or it fails to link rather than testing anything.
-Wget's top-level `make check` also recurses into `fuzz/`, whose harnesses need
-a fuzzing runtime, ship no corpus, and call `dlsym` at exit, which Fil-C
-forbids in a static build; its `tests/` and `testenv/` suites are run directly
-instead. Where a suite reports a count, the build asserts a floor under it,
-because a configuration change that quietly stopped running most of the cases
-would otherwise look exactly like a pass.
+Wget's HTTPS tests name their server `WgetTestingServer` and map it to
+localhost through `HOSTALIASES`, a glibc feature the musl client ignores; the
+build supplies the mapping with `--add-host` so the eight cases run and pass
+rather than failing on an unresolvable host. Wget's top-level `make check` also
+recurses into `fuzz/`, whose harnesses need a fuzzing runtime, ship no corpus,
+and call `dlsym` at exit, which Fil-C forbids in a static build; its `tests/`
+and `testenv/` suites are run directly instead. Where a suite reports a count,
+the build asserts a floor under it, because a configuration change that quietly
+stopped running most of the cases would otherwise look exactly like a pass.
 
 **7-Zip and unRAR ship no test suite at all.** That is why `tests/` exists, and
 why its fuzzing is aimed hardest at those two: they have the largest parsing

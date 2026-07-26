@@ -57,7 +57,14 @@ jobs:
       - name: Build ${{ matrix.utility }}
         run: |
           mkdir -p "staging/${{ matrix.utility }}"
+          # wget's HTTPS test suite resolves a fixed hostname through glibc's
+          # HOSTALIASES, which the musl-built client ignores; the mapping is
+          # supplied through /etc/hosts, which musl reads, because the Dockerfile
+          # cannot write /etc/hosts during a build. Harmless to other utilities.
+          add_host=""
+          [ "${{ matrix.utility }}" = wget ] && add_host="--add-host=WgetTestingServer:127.0.0.1"
           docker build \
+            ${add_host} \
             --platform "${PLATFORM}" \
             --target artifact \
             --output "type=local,dest=staging/${{ matrix.utility }}" \
