@@ -1,0 +1,16 @@
+--- a/bzip2recover.c
++++ b/bzip2recover.c
+@@ -202,7 +202,12 @@
+       bs->buffLive --;
+       return ( ((bs->buffer) >> (bs->buffLive)) & 0x1 );
+    } else {
+-      Int32 retVal = getc ( bs->handle );
++      Int32 retVal;
++      /* getc does not set errno on a clean end of file, so the check below
++         reads whatever an earlier library call happened to leave there.  It is
++         cleared here so that it reports this read and nothing else. */
++      errno = 0;
++      retVal = getc ( bs->handle );
+       if ( retVal == EOF ) {
+          if (errno != 0) readError();
+          return 2;
