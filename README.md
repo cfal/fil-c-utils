@@ -235,6 +235,13 @@ otherwise look exactly like a pass.
 why its fuzzing is aimed hardest at those two: they have the largest parsing
 surface here and the least upstream coverage.
 
+Every exported command is also run before it is shipped, including the alias
+symlinks, against the stripped copies rather than the build tree. Creating a
+symlink proves nothing about whether the program still picks its mode from
+`argv[0]`, and a command that is compiled and checked but never executed can
+ship unable to do its job: `bzip2recover` did exactly that, for years, on every
+musl system including Alpine.
+
 The suite in `tests/` covers the archive utilities. It checks that the binaries
 in `out/` handle correct data exactly, refuse hostile data safely, and survive
 corrupt data without a memory-safety failure.

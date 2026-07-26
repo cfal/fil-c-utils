@@ -132,6 +132,21 @@ RUN strip --strip-debug /artifact/bin/* \
     done \
     && echo "artifact binaries stripped of debug info, Fil-C symbols retained"
 
+# Aliases are symlinks, so creating them proves nothing about whether the
+# program still selects its mode from argv[0]. bzip2recover shipped unable to
+# work at all because it was built and checked but never run; these are the
+# same shape. The shipped, stripped copies are exercised rather than the build
+# tree, so this covers the links, the dispatch and the strip in one step.
+RUN set -e; \
+    printf 'alias dispatch %.0s' $(seq 1 200) > /tmp/alias.txt; \
+    /artifact/bin/xz -c /tmp/alias.txt > /tmp/alias.xz; \
+    /artifact/bin/unxz -c /tmp/alias.xz | cmp - /tmp/alias.txt; \
+    /artifact/bin/xzcat /tmp/alias.xz | cmp - /tmp/alias.txt; \
+    /artifact/bin/lzma -c /tmp/alias.txt > /tmp/alias.lzma; \
+    /artifact/bin/unlzma -c /tmp/alias.lzma | cmp - /tmp/alias.txt; \
+    /artifact/bin/lzcat /tmp/alias.lzma | cmp - /tmp/alias.txt; \
+    echo "unxz, xzcat, lzma, unlzma and lzcat dispatch"
+
 FROM scratch AS artifact
 
 ARG FILC_VERSION
