@@ -122,11 +122,6 @@ def rarlab_unrar():
     return newest(found)
 
 
-def zlib_net():
-    html = get_text("https://zlib.net/")
-    return newest(re.findall(r"zlib-(\d+(?:\.\d+)+)\.tar\.(?:gz|xz)", html))
-
-
 # ------------------------------------------------------------------ components
 # Each row: label, Dockerfile, the ARG holding the pin, and how to find latest.
 COMPONENTS = [
@@ -139,7 +134,7 @@ COMPONENTS = [
     ("zstd",    "zstd/Dockerfile",  "ZSTD_VERSION",     lambda: github_latest("facebook/zstd", "v")),
     ("curl",    "curl/Dockerfile",  "CURL_VERSION",     lambda: github_latest("curl/curl", "curl-", underscores=True)),
     ("openssl", "curl/Dockerfile",  "OPENSSL_VERSION",  lambda: github_latest("openssl/openssl", "openssl-")),
-    ("zlib",    "curl/Dockerfile",  "ZLIB_VERSION",     zlib_net),
+    ("zlib",    "curl/Dockerfile",  "ZLIB_VERSION",     lambda: github_latest("madler/zlib", "v")),
     ("wget",         "wget/Dockerfile", "WGET_VERSION",         lambda: gnu_ftp("wget")),
     ("libunistring", "wget/Dockerfile", "LIBUNISTRING_VERSION", lambda: gnu_ftp("libunistring")),
     ("libidn2",      "wget/Dockerfile", "LIBIDN2_VERSION",      lambda: gnu_ftp("libidn2", directory="libidn")),

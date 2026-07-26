@@ -732,9 +732,9 @@ curl       8.19.0     8.21.0     OUTDATED
 ```
 
 Every upstream has a different release source, so the sources are queried
-differently: GitHub releases for 7-Zip, XZ, Zstandard, curl, and OpenSSL; the
-GNU FTP listing for tar and gzip; sourceware for bzip2; rarlab for unRAR; and
-zlib.net for zlib. The curl build's bundled OpenSSL and zlib are checked too.
+differently: GitHub releases for 7-Zip, XZ, Zstandard, curl, OpenSSL, and zlib;
+the GNU FTP listing for tar and gzip; sourceware for bzip2; and rarlab for
+unRAR. The curl build's bundled OpenSSL and zlib are checked too.
 
 The check never stops at the first problem. A component whose upstream is
 unreachable, or whose listing has changed shape, is reported as an error and
