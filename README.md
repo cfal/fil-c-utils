@@ -16,9 +16,11 @@ Included utilities:
 | bzip2 | `bzip2`, `bzip2recover`, `bunzip2`, `bzcat` |
 | XZ Utils | `xz`, `unxz`, `xzcat`, `lzma`, `unlzma`, `lzcat` |
 | Zstandard | `zstd`, `unzstd`, `zstdcat` |
+| curl | `curl` |
 
-Fil-C turns spatial and temporal memory-safety violations into deterministic
-process failures. That is useful defense in depth for programs that process
+Every utility here reads untrusted input: seven of them parse archives, and
+curl speaks to the network. Fil-C turns spatial and temporal memory-safety
+violations into deterministic process failures. That is useful defense in depth for programs that process
 untrusted archives. It does not replace sandboxing, least privilege, archive
 size limits, path validation, or timely dependency updates.
 
@@ -38,7 +40,7 @@ Build everything:
 ./build-all.sh
 ```
 
-The script stages all seven builds and replaces `out/` only after every build
+The script stages all eight builds and replaces `out/` only after every build
 has succeeded. Binaries are flat; only license notices use subdirectories:
 
 ```text
@@ -49,6 +51,7 @@ out/
 ├── bzcat -> bzip2
 ├── bzip2
 ├── bzip2recover
+├── curl
 ├── gunzip -> gzip
 ├── gzip
 ├── lzcat -> xz
@@ -66,11 +69,14 @@ out/
 └── licenses/
     ├── 7zip/
     ├── bzip2/
+    ├── curl/
     ├── fil-c/
     ├── gzip/
+    ├── openssl/
     ├── tar/
     ├── unrar/
     ├── xz/
+    ├── zlib/
     └── zstd/
 ```
 
@@ -131,7 +137,7 @@ docker build \
   ./gzip
 ```
 
-Replace `gzip` with `7z`, `unrar`, `tar`, `bzip2`, `xz`, or `zstd`. Docker
+Replace `gzip` with `7z`, `unrar`, `tar`, `bzip2`, `xz`, `zstd`, or `curl`. Docker
 merges an individual artifact tree into an existing destination, so old files
 may remain. `build-all.sh` avoids that ambiguity by staging every build and
 replacing `out/` transactionally.
@@ -143,8 +149,10 @@ docker build --platform linux/amd64 -t filc-zstd ./zstd
 docker run --rm -i filc-zstd -dc < file.zst > file
 ```
 
-These images have no shell, package manager, dynamic loader, or CA bundle.
-They contain the selected utility, command aliases, and license notices.
+These images have no shell, package manager, or dynamic loader. They contain
+the selected utility, command aliases, and license notices. The curl image is
+self-contained even for HTTPS, because its CA bundle is compiled into the
+executable rather than read from disk.
 
 ## Checking an artifact
 
@@ -376,6 +384,9 @@ than content-addressed image digests.
 | bzip2 source | 1.0.8 | `ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269` |
 | XZ Utils source | 5.8.3 | `fff1ffcf2b0da84d308a14de513a1aa23d4e9aa3464d17e64b9714bfdd0bbfb6` |
 | Zstandard source | 1.5.7 | `eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3` |
+| curl source | 8.19.0 | `4eb41489790d19e190d7ac7e18e82857cdd68af8f4e66b292ced562d333f11df` |
+| OpenSSL source | 3.5.7 | `a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8` |
+| zlib source | 1.3.1 | `9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23` |
 
 The Dockerfile frontend, Ubuntu base image, and Ubuntu packages installed in
 the builder are not pinned to immutable digests or a snapshot repository. They
@@ -404,6 +415,14 @@ RAR compression algorithm. Review `out/licenses/` before redistribution.
   threading are enabled.
 - Debug information is retained intentionally, so binaries are significantly
   larger than conventional stripped distribution builds.
+- curl is built without HTTP/2, HTTP/3, brotli, zstd, IDN, PSL and LDAP. It
+  keeps HTTP/1.1, TLS via OpenSSL, gzip via zlib, and the protocols OpenSSL and
+  musl support unaided.
+- curl's OpenSSL has no assembly, so TLS throughput is well below a
+  distribution build. Upstream Fil-C's OpenSSL port also carries roughly 90 KB
+  of changes for constant-time guarantees that this build does not apply; the
+  library is functionally correct without them, but side-channel resistance in
+  some primitives is weaker than upstream OpenSSL.
 
 ## Runtime limitations
 
@@ -470,6 +489,8 @@ recovery.
 │   ├── Dockerfile
 │   └── patches/
 ├── bzip2/
+│   └── Dockerfile
+├── curl/
 │   └── Dockerfile
 ├── gzip/
 │   └── Dockerfile
@@ -594,6 +615,35 @@ dynamically loaded Fil-C executable. `-Wc,-static` passes the flag through to
 the Fil-C driver, producing the required static PIE. Defining
 `LZMA_RANGE_DECODER_CONFIG=0` selects XZ's portable C range decoder instead of
 its x86 inline-assembly decoder.
+
+curl is the only utility here with dependencies, and Fil-C's release ships
+just libc, libc++ and its runtime, so its Dockerfile builds zlib and OpenSSL
+with the same compiler into a shared `/deps` prefix before building curl.
+
+OpenSSL needs `no-asm`, because Fil-C cannot compile its hand-written assembly.
+Every primitive therefore runs the portable C path, which costs throughput on
+TLS-heavy transfers and is the main price of this build. `no-shared` and
+`no-module` avoid the linker version scripts that are the only change Fil-C's
+own OpenSSL port required, and `OPENSSL_NO_SECURE_MEMORY` disables the
+mlock-backed secure heap that port asserts is unused. Two settings are easy to
+get wrong: `--libdir=lib` is required because OpenSSL defaults to `lib64` on
+x86-64 while curl derives `-L<prefix>/lib` from `--with-openssl`, and the
+mismatch fails the static link with a bare `cannot find -lssl`; and
+`make install_ssldirs` has to follow `install_sw`, or `openssl.cnf` is missing
+and the build's own TLS test cannot generate a certificate.
+
+curl needs the same libtool treatment as XZ, for the same reason: a plain
+`-static` yields a dynamically loaded Fil-C executable, and `-Wc,-static` at
+`make` time is what produces the static PIE. Overriding `LDFLAGS` there
+replaces what configure recorded, so `-L/deps/lib` has to be repeated.
+
+`--with-ca-embed` compiles the CA bundle into the executable, so the artifact
+verifies certificates with no files on disk. The build asserts the certificates
+are present by counting `BEGIN CERTIFICATE` blocks in the binary. Its TLS test
+runs against an `openssl s_server` this build produced, so it needs no network,
+and it checks both directions: a trusted chain must succeed and an untrusted
+one must fail, since a client that verifies nothing would otherwise look
+healthy.
 
 Zstandard is built with `ZSTD_NO_ASM=1`. Version 1.5.7 has one pointer-returning
 assembly block and several optional alignment blocks that do not honor
