@@ -1,10 +1,12 @@
 name: ci
 
-# build -> test -> bundle.
+# build -> test -> bundle -> release.
 #
 # The test suite runs against the binaries that were just compiled, so it
 # cannot run before the build. Gating therefore sits on the bundle: nothing is
-# published unless tests/run-tests.sh passed against exactly those bytes.
+# published unless tests/run-tests.sh passed against exactly those bytes. The
+# release job hangs off the bundle, so a tag cannot produce a release whose
+# binaries failed the suite.
 #
 # The compile itself lives in build.yml and is called from here, so the build
 # runs once per CI run rather than once per workflow.
@@ -12,6 +14,7 @@ name: ci
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
     inputs:
@@ -178,20 +181,66 @@ jobs:
           fi
           exit "${failed}"
 
+      # Tagged builds are named for the tag, everything else for the commit.
       - name: Create tarball
         id: tarball
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           : "${GITHUB_SHA:?GITHUB_SHA is unset, refusing to build an unnamed artifact}"
-          name="fil-c-utils-${GITHUB_SHA::7}-x86_64"
+          if [ "${REF_TYPE}" = 'tag' ]; then
+            version="${REF_NAME}"
+          else
+            version="${GITHUB_SHA::7}"
+          fi
+          name="fil-c-utils-${version}-x86_64"
           mv out "${name}"
           tar -czf "${name}.tar.gz" \
             --owner=0 --group=0 --numeric-owner --sort=name "${name}"
+          sha256sum "${name}.tar.gz" > "${name}.tar.gz.sha256"
           echo "name=${name}" >> "${GITHUB_OUTPUT}"
           ls -l "${name}.tar.gz"
+          cat "${name}.tar.gz.sha256"
           tar -tzf "${name}.tar.gz" | head -30
 
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.tarball.outputs.name }}
-          path: ${{ steps.tarball.outputs.name }}.tar.gz
+          path: |
+            ${{ steps.tarball.outputs.name }}.tar.gz
+            ${{ steps.tarball.outputs.name }}.tar.gz.sha256
           if-no-files-found: error
+
+  # Only for v* tags. `needs: bundle` carries the whole chain with it, so a
+  # release can only exist for binaries that built, passed the suite, and
+  # cleared the artifact checks.
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    needs: bundle
+    if: github.ref_type == 'tag'
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: fil-c-utils-*
+          path: release
+          merge-multiple: true
+
+      - name: Check the release payload
+        run: |
+          ls -l release/
+          test -n "$(find release -name 'fil-c-utils-*.tar.gz' -print -quit)" \
+            || { echo 'no tarball to release'; exit 1; }
+          (cd release && sha256sum -c ./*.tar.gz.sha256)
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            release/*.tar.gz
+            release/*.tar.gz.sha256

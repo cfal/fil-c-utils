@@ -532,13 +532,34 @@ artifact stage. Keep utility-specific work inside that utility's directory.
 covers what a per-utility build check cannot: behaviour across formats, hostile
 input, and inputs that no upstream test suite ships.
 
-`ci.yml` runs on pushes to `main` and on pull requests, in three stages: build,
-then the test suite against those binaries, then the bundle. The bundle stage
-depends on the test stage, so a failing suite means no
-`fil-c-utils-<commit>-x86_64.tar.gz` is published. `build.yml` holds the
-compile matrix and exists only to be called from `ci.yml`; the utilities build
-independently, so running them in parallel makes CI take the time of the
-slowest one rather than the sum of all seven.
+`ci.yml` runs on pushes to `main`, on pull requests, and on `v*` tags, in four
+stages: build, then the test suite against those binaries, then the bundle,
+then a release for tags only. Each stage depends on the one before it, so a
+failing suite means no `fil-c-utils-<version>-x86_64.tar.gz` is published and
+no release is drafted. `build.yml` holds the compile matrix and exists only to
+be called from `ci.yml`; the utilities build independently, so running them in
+parallel makes CI take the time of the slowest one rather than the sum of them
+all.
+
+### Cutting a release
+
+Push a tag beginning with `v`:
+
+```sh
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+That runs the whole pipeline against the tag and, if every stage passes, drafts
+a GitHub release holding `fil-c-utils-v1.0.0-x86_64.tar.gz` and its `.sha256`.
+The release is a **draft**, so it is reviewed before anyone can download it.
+Tagged builds take their version from the tag; every other build is named for
+the short commit hash.
+
+The release job is the only one granted `contents: write`, and it hangs off the
+bundle, which hangs off the test suite. A tag cannot produce a release whose
+binaries failed the suite. It re-verifies the checksum after downloading the
+artifact rather than trusting the round trip through artifact storage.
 
 ### Build design
 
