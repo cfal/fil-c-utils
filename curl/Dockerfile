@@ -22,6 +22,14 @@ ARG CURL_SHA256
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+# Upstream release hosts are occasionally slow or briefly unreachable, and a
+# single stalled fetch otherwise fails a whole build: curl's default is one
+# attempt with a five minute connect timeout. These options give up on a
+# transfer that stalls below 1 KB/s and retry it instead of waiting it out.
+# Integrity still rests on the SHA-256 check, not on the transfer succeeding.
+ENV FETCH_RETRY="--retry 5 --retry-delay 2 --retry-all-errors \
+    --connect-timeout 20 --speed-limit 1024 --speed-time 30"
+
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         binutils \
@@ -40,7 +48,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/filc
-RUN curl -fsSLo /tmp/filc.tar.xz \
+RUN curl -fsSL ${FETCH_RETRY} -o /tmp/filc.tar.xz \
         "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/filc-${FILC_VERSION}-linux-x86_64.tar.xz" \
     && echo "${FILC_SHA256}  /tmp/filc.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/filc.tar.xz \
@@ -52,7 +60,7 @@ RUN curl -fsSLo /tmp/filc.tar.xz \
 # with the same compiler, into a single /deps prefix.
 
 WORKDIR /zlib
-RUN curl -fsSLo /tmp/zlib.tar.gz \
+RUN curl -fsSL ${FETCH_RETRY} -o /tmp/zlib.tar.gz \
         "https://zlib.net/fossils/zlib-${ZLIB_VERSION}.tar.gz" \
     && echo "${ZLIB_SHA256}  /tmp/zlib.tar.gz" | sha256sum -c - \
     && tar --strip-components=1 -xzf /tmp/zlib.tar.gz \
@@ -65,7 +73,7 @@ RUN CC=/opt/filc/build/bin/clang \
     && make install
 
 WORKDIR /openssl
-RUN curl -fsSLo /tmp/openssl.tar.gz \
+RUN curl -fsSL ${FETCH_RETRY} -o /tmp/openssl.tar.gz \
         "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz" \
     && echo "${OPENSSL_SHA256}  /tmp/openssl.tar.gz" | sha256sum -c - \
     && tar --strip-components=1 -xzf /tmp/openssl.tar.gz \
@@ -102,7 +110,7 @@ RUN ./Configure linux-x86_64 \
     && make install_ssldirs
 
 WORKDIR /src
-RUN curl -fsSLo /tmp/curl.tar.xz \
+RUN curl -fsSL ${FETCH_RETRY} -o /tmp/curl.tar.xz \
         "https://curl.se/download/curl-${CURL_VERSION}.tar.xz" \
     && echo "${CURL_SHA256}  /tmp/curl.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/curl.tar.xz \

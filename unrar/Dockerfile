@@ -20,6 +20,14 @@ ARG RAR_FIXTURE_ARCHIVE_SHA256
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+# Upstream release hosts are occasionally slow or briefly unreachable, and a
+# single stalled fetch otherwise fails a whole build: curl's default is one
+# attempt with a five minute connect timeout. These options give up on a
+# transfer that stalls below 1 KB/s and retry it instead of waiting it out.
+# Integrity still rests on the SHA-256 check, not on the transfer succeeding.
+ENV FETCH_RETRY="--retry 5 --retry-delay 2 --retry-all-errors \
+    --connect-timeout 20 --speed-limit 1024 --speed-time 30"
+
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         binutils \
@@ -35,7 +43,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/filc
-RUN curl -fsSLo /tmp/filc.tar.xz \
+RUN curl -fsSL ${FETCH_RETRY} -o /tmp/filc.tar.xz \
         "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/filc-${FILC_VERSION}-linux-x86_64.tar.xz" \
     && echo "${FILC_SHA256}  /tmp/filc.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/filc.tar.xz \
@@ -43,7 +51,7 @@ RUN curl -fsSLo /tmp/filc.tar.xz \
     && rm /tmp/filc.tar.xz
 
 WORKDIR /src
-RUN curl -fsSLo /tmp/unrar.tar.gz \
+RUN curl -fsSL ${FETCH_RETRY} -o /tmp/unrar.tar.gz \
         "https://www.rarlab.com/rar/unrarsrc-${UNRAR_VERSION}.tar.gz" \
     && echo "${UNRAR_SHA256}  /tmp/unrar.tar.gz" | sha256sum -c - \
     && tar --strip-components=1 -xzf /tmp/unrar.tar.gz \
@@ -91,7 +99,7 @@ RUN file ./unrar > /tmp/unrar.file \
     && ! grep -q "@llvm\." /tmp/unrar.strings \
     && ./unrar >/tmp/unrar-help.txt
 
-RUN curl -fsSLo /tmp/rar5-subdirs.rar \
+RUN curl -fsSL ${FETCH_RETRY} -o /tmp/rar5-subdirs.rar \
         "https://raw.githubusercontent.com/markokr/rarfile/${RAR_FIXTURE_COMMIT}/test/files/rar5-subdirs.rar" \
     && echo "${RAR_FIXTURE_SHA256}  /tmp/rar5-subdirs.rar" | sha256sum -c - \
     && ./unrar t -idq /tmp/rar5-subdirs.rar \
@@ -100,7 +108,7 @@ RUN curl -fsSLo /tmp/rar5-subdirs.rar \
     && echo "ecdc5536f73bdae8816f0ea40726ef5e9b810d914493075903bb90623d97b1d8  /tmp/smoke/sub/dir1/file1.txt" | sha256sum -c - \
     && echo "67ee5478eaadb034ba59944eb977797b49ca6aa8d3574587f36ebcbeeb65f70e  /tmp/smoke/sub/dir2/file2.txt" | sha256sum -c -
 
-RUN curl -fsSLo /tmp/rarfile-fixtures.tar.gz \
+RUN curl -fsSL ${FETCH_RETRY} -o /tmp/rarfile-fixtures.tar.gz \
         "https://github.com/markokr/rarfile/archive/${RAR_FIXTURE_COMMIT}.tar.gz" \
     && echo "${RAR_FIXTURE_ARCHIVE_SHA256}  /tmp/rarfile-fixtures.tar.gz" | sha256sum -c - \
     && mkdir -p /tmp/rarfile-fixtures \
