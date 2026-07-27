@@ -44,7 +44,12 @@ jobs:
     name: build ${{ matrix.utility }}
     runs-on: ubuntu-latest
     needs: prepare
-    timeout-minutes: 120
+    # git is the outlier: its own suite is over a thousand test files and runs
+    # at half the processors, which on a hosted runner takes hours rather than
+    # the minutes every other utility needs. Raising the ceiling for all of them
+    # would mean a genuinely stuck build elsewhere burned that time before
+    # failing, so only git gets the longer one.
+    timeout-minutes: ${{ matrix.utility == 'git' && 300 || 120 }}
     strategy:
       fail-fast: false
       matrix:
