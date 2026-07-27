@@ -136,6 +136,17 @@ def rarlab_unrar():
     return newest(found)
 
 
+def libevent_latest():
+    # libevent tags releases release-2.1.13-stable rather than 2.1.13.
+    tags = get_json("https://api.github.com/repos/libevent/libevent/tags")
+    found = []
+    for t in tags:
+        name = t["name"]
+        if name.startswith("release-") and name.endswith("-stable"):
+            found.append(name[len("release-"):-len("-stable")])
+    return newest(found)
+
+
 # ------------------------------------------------------------------ components
 # Each row: label, Dockerfile, the ARG holding the pin, and how to find latest.
 COMPONENTS = [
@@ -155,6 +166,10 @@ COMPONENTS = [
     ("libpsl",       "wget/Dockerfile", "LIBPSL_VERSION",       lambda: github_latest("rockdaboot/libpsl")),
     ("pcre2",        "wget/Dockerfile", "PCRE2_VERSION",        lambda: github_latest("PCRE2Project/pcre2", "pcre2-")),
     ("cares",        "wget/Dockerfile", "CARES_VERSION",        lambda: github_latest("c-ares/c-ares", "v")),
+    ("tmux",     "tmux/Dockerfile", "TMUX_VERSION",     lambda: github_latest("tmux/tmux")),
+    ("libevent", "tmux/Dockerfile", "LIBEVENT_VERSION", libevent_latest),
+    ("utf8proc", "tmux/Dockerfile", "UTF8PROC_VERSION", lambda: github_latest("JuliaStrings/utf8proc", "v")),
+    ("ncurses",  "tmux/Dockerfile", "NCURSES_VERSION",  lambda: gnu_ftp("ncurses")),
 ]
 
 
