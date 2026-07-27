@@ -414,6 +414,26 @@ RUN make install DESTDIR=/artifact \
     && install -Dm644 /opt/filc/MUSL-LICENSE.txt /artifact/licenses/fil-c/MUSL-LICENSE.txt \
     && install -Dm644 /opt/filc/PAS-LICENSE.txt /artifact/licenses/fil-c/PAS-LICENSE.txt
 
+# bin/ is the directory that ends up on someone's PATH, and everything this
+# repository puts there is a static executable. git installs one thing that is
+# not: git-cvsserver, a Perl script. It cannot run from the artifact, which
+# carries no interpreter, and it is the reason the bundle refused the tree,
+# since that job reads every executable file in bin/ with readelf and stops on
+# the first that is not an ELF binary. Dropping whatever is not one makes the
+# tree match what the README already says it contains. The type is written to
+# a file rather than piped into grep: grep exits at the first match, file dies
+# on SIGPIPE, and under pipefail the pipeline reports failure for a binary
+# that was perfectly good.
+RUN set -e; \
+    for f in /artifact/bin/*; do \
+        if [ -L "${f}" ]; then continue; fi; \
+        file -b "${f}" > /tmp/bin-type; \
+        if grep -q '^ELF ' /tmp/bin-type; then continue; fi; \
+        echo "dropping ${f##*/}: $(cat /tmp/bin-type)"; \
+        rm -f "${f}"; \
+    done; \
+    echo "bin/ holds: $(ls /artifact/bin | tr '\n' ' ')"
+
 # Executables are built with -g so the checks above can read DWARF. The shipped
 # copies drop it: debug information is most of their size and is recoverable by
 # rebuilding. Fil-C keeps its own metadata for panic reports, so a stripped
