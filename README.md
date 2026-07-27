@@ -19,9 +19,11 @@ Included utilities:
 | curl | `curl` |
 | GNU Wget | `wget` |
 | GNU nano | `nano` |
+| tmux | `tmux` |
 
 Every utility here reads untrusted input: seven of them parse archives, curl
-and wget speak to the network, and nano opens whatever file it is pointed at.
+and wget speak to the network, nano opens whatever file it is pointed at, and
+tmux parses the escape sequences everything running in its panes emits.
 Fil-C turns spatial and temporal memory-safety violations into deterministic
 process failures. That is useful defense in depth for programs that process
 untrusted archives. It does not replace sandboxing, least privilege, archive
@@ -63,6 +65,7 @@ out/
 │   ├── lzma -> xz
 │   ├── nano
 │   ├── tar
+│   ├── tmux
 │   ├── unrar
 │   ├── unlzma -> xz
 │   ├── unxz -> xz
@@ -84,14 +87,17 @@ out/
     ├── libidn2/
     ├── libpsl/
     ├── libunistring/
+    ├── libevent/
     ├── nano/
     ├── ncurses/
     ├── openssl/
     ├── pcre2/
     ├── tar/
+    ├── tmux/
     ├── unrar/
     ├── wget/
     ├── xz/
+    ├── utf8proc/
     ├── zlib/
     └── zstd/
 ```
@@ -110,6 +116,7 @@ They can run directly from `out/`:
 ./out/bin/curl -sSL https://example.com/ -o page.html
 ./out/bin/wget -qO page.html https://example.com/
 ./out/bin/nano notes.txt
+./out/bin/tmux new-session
 ```
 
 curl and wget both verify certificates against
@@ -129,6 +136,13 @@ uses standard host paths: syntax highlighting reads `/etc/nanorc` and
 these; where they are absent nano runs without those two extras. Editing,
 UTF-8, mouse, multiple buffers, and the spell and lint hooks do not depend on
 them.
+
+tmux carries the same compiled-in terminal descriptions, so it runs where no
+terminfo database exists. It needs two of them, one for the terminal it runs
+inside and one for the terminal it presents to programs in its panes, and both
+are built in. What it does need from the host is a shell: panes run
+`$SHELL`, or `/bin/sh` if that is unset, so the scratch image below can report
+its version but cannot open a pane.
 
 Set `PLATFORM` to override the Docker platform. The pinned Fil-C release is
 currently provided only for `linux/amd64`:
@@ -259,6 +273,7 @@ delicate, and every one of them runs against the Fil-C binary.
 | GNU tar | Autotest, 226 files | 208 pass, 36 skip |
 | curl | 1919 cases | 1675 pass, 244 skip |
 | GNU Wget | `tests/` + `testenv/`, 136 cases | 134 pass, 2 skip |
+| tmux | `regress/`, 35 cases (git only) | 35 pass |
 | gzip | 30 cases | 29 pass, 1 skip |
 | XZ Utils | 18 cases | 18 pass |
 | Zstandard | `playTests.sh` and fuzzers | all pass |
@@ -279,7 +294,19 @@ harness points the terminfo path at a directory that does not exist, so a pass
 also proves the terminal descriptions compiled into the binary are what let it
 run where the scratch image has no terminfo on disk.
 
-Three details are easy to get wrong. curl's suite silently skips its 62 HTTPS
+tmux's release tarball ships no tests either, but unlike nano its suite does
+exist: the 35 scripts in `regress/` live only in the git tree. The build fetches
+the same tag a second time as a source archive and takes only that directory,
+which is how the unRAR build gets its fixture corpus, and runs the tests against
+the binary already built. Two further checks cover what a headless suite cannot.
+Attaching is the path where a client hands its terminal's file descriptors to
+the server over a unix socket with `SCM_RIGHTS`, so `script(1)` supplies a real
+pseudo-terminal and a keystroke is driven through the server into a shell in a
+pane. Separately, every terminfo database on the build image is moved aside and
+a session is started with none, which proves the compiled-in descriptions rather
+than the builder's own database are doing the work.
+
+Four details are easy to get wrong. curl's suite silently skips its 62 HTTPS
 cases unless `stunnel4` is installed, and zstd's re-links the CLI, so it needs
 the same flags as the build or it fails to link rather than testing anything.
 Wget's HTTPS tests name their server `WgetTestingServer` and map it to
@@ -291,6 +318,9 @@ and call `dlsym` at exit, which Fil-C forbids in a static build; its `tests/`
 and `testenv/` suites are run directly instead. Where a suite reports a count,
 the build asserts a floor under it, because a configuration change that quietly
 stopped running most of the cases would otherwise look exactly like a pass.
+tmux's `osc-11colours` runs about 250 sub-cases a quarter second apart and
+legitimately takes over a minute, so each test gets a generous timeout; a
+tighter one kills it mid-run and reads as a failure.
 
 **7-Zip and unRAR ship no test suite at all.** That is why `tests/` exists, and
 why its fuzzing is aimed hardest at those two: they have the largest parsing
@@ -524,6 +554,10 @@ than content-addressed image digests.
 | GNU nano source | 9.1 | `5f47764274cb7532349ce0aa20ec10f1e8e851a6e9fa3eb66812c43d196db042` |
 | ncurses source | 6.6 | `355b4cbbed880b0381a04c46617b7656e362585d52e9cf84a67e2009b749ff11` |
 | file source | 5.46 | `c9cc77c7c560c543135edc555af609d5619dbef011997e988ce40a3d75d86088` |
+| tmux source | 3.7b | `87f2e99e3b685973f2ca002ffd6ed7e51a5744f7009daae5a15670b6d532db96` |
+| tmux tests (git tag) | 3.7b | `156dc43dcbc7f06e35e1fae3118c44d77a370c46676b34b82bbafc4e608d8130` |
+| libevent source | 2.1.13 | `f7e9383b8c0baa81b687e5b5eecc01beefaf1b19b64151d95ed61647fe7a315c` |
+| utf8proc source | 2.11.3 | `abfed50b6d4da51345713661370290f4f4747263ee73dc90356299dfc7990c78` |
 
 The Dockerfile frontend, Ubuntu base image, and Ubuntu packages installed in
 the builder are not pinned to immutable digests or a snapshot repository. They
@@ -567,6 +601,12 @@ RAR compression algorithm. Review `out/licenses/` before redistribution.
   left off: it needs GPGME to verify signatures, and GPGME is not among the
   libraries ported to Fil-C. NLS is also off, as it is for curl. wget shares
   curl's no-assembly OpenSSL and the throughput and side-channel caveats above.
+- tmux is built with sixel image support and utf8proc, which replaces its
+  built-in character-width tables with fuller Unicode ones. systemd integration
+  is left off: it would link libsystemd and defeat a self-contained static
+  binary. tmux runs panes with `$SHELL` or `/bin/sh`, so unlike the other
+  utilities its scratch image is only useful for `tmux -V`; a pane needs a
+  shell the image does not contain.
 
 ## Runtime limitations
 
@@ -646,6 +686,8 @@ recovery.
 ├── tar/
 │   ├── Dockerfile
 │   └── patches/
+├── tmux/
+│   └── Dockerfile
 ├── unrar/
 │   ├── Dockerfile
 │   └── patches/
@@ -882,6 +924,19 @@ are needed beyond `--enable-utf8`; the build asserts `ENABLE_UTF8` and
 `HAVE_LIBMAGIC` in `config.h` rather than trusting configure to have found the
 library. Only nano's `lib` and `src` directories are built, which skips the
 documentation step and its `makeinfo` requirement.
+
+tmux reuses that same ncurses recipe and adds libevent for its event loop and
+utf8proc for character widths. All three build unchanged. Two things about it
+are specific. It is the only utility here whose terminal descriptions have to
+cover both directions: tmux needs an entry for the terminal it runs inside and
+another for the one it presents to programs in its panes, which is why `screen`
+and `tmux` appear in the fallback list next to the outer terminals. And
+utf8proc's Makefile has no static-only install target, so its archive, header
+and pkg-config file are placed by hand; `make install` would insist on building
+the shared library too. The upstream reference build, `build_tmux.sh` in the
+Fil-C tree, is dynamic and installs into a prefix that already holds ncurses
+and libevent, so the static link and the terminfo question are this build's own
+work rather than something inherited from it.
 
 ### Updating a dependency
 

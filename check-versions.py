@@ -50,15 +50,29 @@ def get_json(url):
 
 
 # ---------------------------------------------------------------- version logic
+# tmux names its point releases 3.7a, 3.7b. Treating the letter as a component
+# keeps 3.7 < 3.7a < 3.7b; without it every 3.7x compares equal to 3.7 and to
+# each other, so a new point release would never be reported as behind.
+POINT_RELEASE = re.compile(r"^(\d+(?:\.\d+)*)([a-z])$")
+
+
 def as_tuple(version):
-    """Dotted numeric version to an int tuple, e.g. '26.02' -> (26, 2)."""
+    """Dotted numeric version to an int tuple, e.g. '26.02' -> (26, 2).
+
+    A single trailing letter becomes a final component, so '3.7' -> (3, 7, 0)
+    and '3.7b' -> (3, 7, 2).
+    """
+    suffix = 0
+    match = POINT_RELEASE.match(version)
+    if match:
+        version, suffix = match.group(1), ord(match.group(2)) - ord("a") + 1
     parts = re.findall(r"\d+", version)
     if not parts:
         raise ValueError(f"no numbers in version {version!r}")
-    return tuple(int(p) for p in parts)
+    return tuple(int(p) for p in parts) + (suffix,)
 
 
-STABLE = re.compile(r"^\d+(\.\d+)*$")
+STABLE = re.compile(r"^\d+(\.\d+)*[a-z]?$")
 
 
 def is_stable(version):
@@ -122,6 +136,17 @@ def rarlab_unrar():
     return newest(found)
 
 
+def libevent_latest():
+    # libevent tags releases release-2.1.13-stable rather than 2.1.13.
+    tags = get_json("https://api.github.com/repos/libevent/libevent/tags")
+    found = []
+    for t in tags:
+        name = t["name"]
+        if name.startswith("release-") and name.endswith("-stable"):
+            found.append(name[len("release-"):-len("-stable")])
+    return newest(found)
+
+
 # ------------------------------------------------------------------ components
 # Each row: label, Dockerfile, the ARG holding the pin, and how to find latest.
 COMPONENTS = [
@@ -141,6 +166,10 @@ COMPONENTS = [
     ("libpsl",       "wget/Dockerfile", "LIBPSL_VERSION",       lambda: github_latest("rockdaboot/libpsl")),
     ("pcre2",        "wget/Dockerfile", "PCRE2_VERSION",        lambda: github_latest("PCRE2Project/pcre2", "pcre2-")),
     ("cares",        "wget/Dockerfile", "CARES_VERSION",        lambda: github_latest("c-ares/c-ares", "v")),
+    ("tmux",     "tmux/Dockerfile", "TMUX_VERSION",     lambda: github_latest("tmux/tmux")),
+    ("libevent", "tmux/Dockerfile", "LIBEVENT_VERSION", libevent_latest),
+    ("utf8proc", "tmux/Dockerfile", "UTF8PROC_VERSION", lambda: github_latest("JuliaStrings/utf8proc", "v")),
+    ("ncurses",  "tmux/Dockerfile", "NCURSES_VERSION",  lambda: gnu_ftp("ncurses")),
 ]
 
 
