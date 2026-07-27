@@ -238,7 +238,16 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/tmux-tests.tar.gz \
 # final assertions are printed, which is what named C-s as the sticking point.
 RUN set -e; \
     cd /src/regress; \
-    export TERM=screen HOME=/root TEST_TMUX=/src/tmux; \
+    export TERM=screen HOME=/root TEST_TMUX=/src/tmux FILC_LOG_TO_FILE=1; \
+    dump_filc() { \
+        found=0; \
+        for f in /src/regress/filc-log-*.txt /tmp/filc-log-*.txt; do \
+            [ -f "${f}" ] || continue; found=1; echo "== ${f}"; cat "${f}"; \
+        done; \
+        if [ "${found}" -eq 0 ]; then \
+            echo "(no Fil-C panic log: nothing aborted on a safety violation)"; \
+        fi; \
+    }; \
     reset_server() { \
         for sock in /tmp/tmux-*/*; do \
             [ -S "${sock}" ] || continue; \
@@ -252,6 +261,7 @@ RUN set -e; \
         if [ "$(date +%s)" -ge "${deadline}" ]; then \
             echo "tmux regress: deadline exceeded with ${t} still to run"; exit 1; \
         fi; \
+        rm -f /src/regress/filc-log-*.txt /tmp/filc-log-*.txt 2>/dev/null || true; \
         attempt=1; ok=0; rc=0; \
         while [ "${attempt}" -le 3 ]; do \
             verbose=""; \
@@ -272,9 +282,11 @@ RUN set -e; \
             stalled="${stalled} ${t}"; \
             echo "--- ${t} (stalled on this runner, tolerated) ---"; \
             echo "last assertion reached:"; grep -E "^\[(PASS|FAIL)\]" "/tmp/regress-${t}.log" | tail -3; \
+            echo "--- Fil-C panic log ---"; dump_filc; \
         else \
             fail=$((fail + 1)); failed="${failed} ${t}"; \
             echo "--- ${t} (failed 3 attempts, rc=${rc}) ---"; tail -20 "/tmp/regress-${t}.log"; \
+            echo "--- Fil-C panic log ---"; dump_filc; \
         fi; \
         reset_server; \
     done; \
@@ -297,18 +309,47 @@ RUN set -e; \
 # waited through. Polling turns each wait into a stated expectation, and the
 # dump on failure says whether the socket, the server or the client is the part
 # that went missing.
+#
+# It said the server was: a runner reached the client poll with the session
+# created, the client attached and a full screen drawn to it, and the server
+# gone ten seconds later, leaving its socket behind and printing nothing. A
+# server that forked into the background has no stderr left to print on, which
+# is why an abort there is silent, so it is started under -vv and the log it
+# writes is dumped on failure along with whether any tmux process survives.
+#
+# FILC_LOG_TO_FILE makes the other half of that silence speak. A Fil-C panic is
+# written to stderr, so daemonising throws away exactly the report that matters;
+# set, the runtime writes it to filc-log-<pid>.txt in the working directory
+# instead, stack trace and all. So the dump now answers the question outright:
+# a file means the server was killed for violating memory safety and names the
+# access that did it, and no file means it exited for an ordinary reason and
+# the fault is in the test or the environment rather than in this binary.
 RUN set -e; \
-    export TERM=xterm-256color HOME=/root; \
+    export TERM=xterm-256color HOME=/root FILC_LOG_TO_FILE=1; \
     rm -f /tmp/attach.out; \
+    rm -rf /tmp/tmuxlog; mkdir -p /tmp/tmuxlog; cd /tmp/tmuxlog; \
     diagnose() { \
         echo "attach/pty test failed: $1"; \
         echo "--- socket dir ---"; ls -la /tmp/tmux-*/ 2>&1 || true; \
+        echo "--- server process ---"; ps -o pid,stat,command -e 2>&1 | grep -F tmux || echo "(no tmux process alive)"; \
+        echo "--- Fil-C panic log ---"; \
+        found=0; \
+        for f in /tmp/tmuxlog/filc-log-*.txt /tmp/filc-log-*.txt; do \
+            [ -f "${f}" ] || continue; found=1; echo "== ${f}"; cat "${f}"; \
+        done; \
+        if [ "${found}" -eq 0 ]; then \
+            echo "(no Fil-C panic log: the server did not abort on a safety violation)"; \
+        fi; \
         echo "--- sessions ---"; timeout -k 5 10 /src/tmux -Lattach list-sessions 2>&1 || true; \
         echo "--- clients ---"; timeout -k 5 10 /src/tmux -Lattach list-clients 2>&1 || true; \
+        echo "--- server log tail ---"; \
+        for f in /tmp/tmuxlog/tmux-server*.log; do \
+            [ -f "${f}" ] || continue; echo "== ${f}"; tail -40 "${f}"; \
+        done; \
         echo "--- client log ---"; cat /tmp/attach-client.log 2>&1 || true; \
         exit 1; \
     }; \
-    timeout -k 5 30 /src/tmux -Lattach -f /dev/null new-session -d -s a sh; \
+    timeout -k 5 30 /src/tmux -Lattach -vv -f /dev/null new-session -d -s a sh; \
     n=0; \
     while ! timeout -k 5 10 /src/tmux -Lattach has-session -t a 2>/dev/null; do \
         n=$((n + 1)); [ "${n}" -lt 50 ] || diagnose "session never appeared"; sleep 0.2; \
