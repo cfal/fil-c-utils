@@ -20,10 +20,12 @@ Included utilities:
 | GNU Wget | `wget` |
 | GNU nano | `nano` |
 | tmux | `tmux` |
+| git | `git` |
 
 Every utility here reads untrusted input: seven of them parse archives, curl
-and wget speak to the network, nano opens whatever file it is pointed at, and
-tmux parses the escape sequences everything running in its panes emits.
+and wget speak to the network, git clones from it, nano opens whatever file it
+is pointed at, and tmux parses the escape sequences everything running in its
+panes emits.
 Fil-C turns spatial and temporal memory-safety violations into deterministic
 process failures. That is useful defense in depth for programs that process
 untrusted archives. It does not replace sandboxing, least privilege, archive
@@ -59,6 +61,7 @@ out/
 │   ├── bzip2
 │   ├── bzip2recover
 │   ├── curl
+│   ├── git
 │   ├── gunzip -> gzip
 │   ├── gzip
 │   ├── lzcat -> xz
@@ -81,8 +84,10 @@ out/
     ├── bzip2/
     ├── c-ares/
     ├── curl/
+    ├── expat/
     ├── file/
     ├── fil-c/
+    ├── git/
     ├── gzip/
     ├── libidn2/
     ├── libpsl/
@@ -117,6 +122,7 @@ They can run directly from `out/`:
 ./out/bin/wget -qO page.html https://example.com/
 ./out/bin/nano notes.txt
 ./out/bin/tmux new-session
+./out/bin/git clone https://github.com/git/git.git
 ```
 
 curl and wget both verify certificates against
@@ -127,6 +133,14 @@ certificate updates. Point curl elsewhere with `--cacert`, `--capath`, or
 `SSL_CERT_FILE`. An environment with no bundle at that path, such as a scratch
 container or a distribution that keeps certificates elsewhere, has to supply
 one.
+
+git runs many of its subcommands as separate programs from
+`libexec/git-core`, so that directory has to travel with `bin/git`. It finds
+them relative to its own binary, so the tree works from wherever it is
+unpacked; copying the whole `out/` tree keeps the two together, while moving
+`bin/git` on its own leaves it unable to find them. It verifies HTTPS
+certificates against the same platform bundle curl and wget use, and points
+elsewhere with `http.sslCAInfo` or `GIT_SSL_CAINFO`.
 
 nano carries a set of common terminal descriptions compiled into it, so it
 drives a terminal with no terminfo database on disk. Its optional runtime data
@@ -189,10 +203,9 @@ docker build \
 ```
 
 Replace `gzip` with `7z`, `unrar`, `tar`, `bzip2`, `xz`, `zstd`, `curl`, `wget`,
-or `nano`. Docker
-merges an individual artifact tree into an existing destination, so old files
-may remain. `build-all.sh` avoids that ambiguity by staging every build and
-replacing `out/` transactionally.
+`nano`, `tmux`, or `git`. Docker merges an individual artifact tree into an
+existing destination, so old files may remain. `build-all.sh` avoids that
+ambiguity by staging every build and replacing `out/` transactionally.
 
 wget is the one exception to a plain `docker build`. Its HTTPS test suite,
 which gates the build, resolves a fixed hostname that the musl-built client can
@@ -281,11 +294,22 @@ delicate, and every one of them runs against the Fil-C binary.
 | 7-Zip | **none ships** | — |
 | unRAR | **none ships** | — |
 | GNU nano | **none ships** | pseudo-terminal edit-and-save |
+| git | 1046 files | all pass, 6 cases skipped |
 
 Nothing needed to be excluded or marked expected-to-fail: Fil-C causes no
 failures in any of them. Skipped cases are features these builds do not enable,
 such as HTTP/2 and IDN for curl, or tests needing root for tar. Wget's two
 skips are one web-of-trust HTTPS case and one proxy-environment test.
+
+git's six are named individually rather than by dropping the files that hold
+them, and all six are the same disagreement between two C libraries. git
+converts encodings through musl's iconv, while the suite decides what to expect
+by running the distribution's iconv, which is glibc's. Four cases expect the
+byte-order mark glibc writes for UTF-16 and UTF-32, which musl does not write;
+two compare ISO-2022-JP byte for byte, where musl re-emits the shift sequence
+around every character rather than holding it across a run. Both encodings are
+valid and decode to the same text. The other forty-nine assertions in those
+three files run, and they are the ones that test the encoding machinery.
 
 nano's release ships no test suite and the program has no batch mode, so its
 gate is to drive the real binary through a pseudo-terminal: type a line, save
@@ -607,6 +631,34 @@ RAR compression algorithm. Review `out/licenses/` before redistribution.
   binary. tmux runs panes with `$SHELL` or `/bin/sh`, so unlike the other
   utilities its scratch image is only useful for `tmux -V`; a pane needs a
   shell the image does not contain.
+- git is built with its http and https remotes through libcurl, `grep -P`
+  through PCRE2, and http pushing through expat. Two subsystems are off. git
+  2.55 implements some of its object-store code in Rust, and Fil-C compiles C
+  and C++ only, so `NO_RUST` selects the C implementations those replace.
+  `NO_REGEX=NeedsStartEnd` uses git's bundled regex because musl's `regexec`
+  has no `REG_STARTEND`. `core.fsyncMethod=batch` falls back to a full fsync
+  and says so: it wants a writeout-only flush through `sync_file_range`, which
+  Fil-C's musl does not implement, and git is built without it so that the
+  setting degrades rather than aborting the command. The built-in filesystem
+  monitor is off for the same reason: that daemon crashed under Fil-C, leaving
+  a core file behind and the client reporting a reset connection, so git is
+  built without the backend and reports `fsmonitor--daemon is not supported on
+  this platform`. `core.fsmonitor` still works in its hook form, where the
+  monitor is a program you name rather than one git runs itself. git shares
+  curl's no-assembly OpenSSL and the throughput and side-channel caveats above.
+  The Perl and Python subcommands are not exported: they are scripts, not
+  executables, and this repository ships only the latter.
+- One thing to know about git under load: when many copies of it run at once,
+  a push occasionally stops making progress and has to be killed. This build
+  does not introduce it. Fil-C's own git port, built from the source Fil-C
+  ships, does the same thing, and the same git source built against glibc came
+  through the identical stress without a stall. It is intermittent rather than
+  reliable, and it has not been seen running one git at a time, which is why
+  the build gives each test file a ceiling and retries a file that hits it
+  rather than treating the whole suite as broken. What the stalled processes
+  look like from outside is a fork whose child never reaches `exec` while both
+  its threads wait on a held lock; that is a description of the symptom, not a
+  diagnosis, since a reproducer built to provoke exactly that shape could not.
 
 ## Runtime limitations
 
@@ -678,6 +730,9 @@ recovery.
 │   └── Dockerfile
 ├── curl/
 │   └── Dockerfile
+├── git/
+│   ├── Dockerfile
+│   └── patches/
 ├── gzip/
 │   └── Dockerfile
 ├── nano/

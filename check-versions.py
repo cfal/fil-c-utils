@@ -147,6 +147,12 @@ def libevent_latest():
     return newest(found)
 
 
+def expat_latest():
+    # expat tags its releases R_2_8_2 rather than 2.8.2.
+    tags = get_json("https://api.github.com/repos/libexpat/libexpat/tags")
+    return newest(t["name"][2:].replace("_", ".") for t in tags if t["name"].startswith("R_"))
+
+
 # ------------------------------------------------------------------ components
 # Each row: label, Dockerfile, the ARG holding the pin, and how to find latest.
 COMPONENTS = [
@@ -170,6 +176,8 @@ COMPONENTS = [
     ("libevent", "tmux/Dockerfile", "LIBEVENT_VERSION", libevent_latest),
     ("utf8proc", "tmux/Dockerfile", "UTF8PROC_VERSION", lambda: github_latest("JuliaStrings/utf8proc", "v")),
     ("ncurses",  "tmux/Dockerfile", "NCURSES_VERSION",  lambda: gnu_ftp("ncurses")),
+    ("git",   "git/Dockerfile", "GIT_VERSION",   lambda: github_latest("git/git", "v")),
+    ("expat", "git/Dockerfile", "EXPAT_VERSION", expat_latest),
 ]
 
 
