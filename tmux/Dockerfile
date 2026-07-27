@@ -204,19 +204,37 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/tmux-tests.tar.gz \
 # same rate on the same box. Retrying distinguishes the two: a race passes on a
 # second attempt, a real defect fails every attempt. Retries are announced so a
 # newly flaky case is visible rather than silently absorbed.
+#
+# Every tmux invocation here is bounded, the tidy-up between cases included. A
+# client asked to kill an unresponsive server waits on a reply that never comes
+# and blocks for as long as it is allowed to: unbounded, that call hung a hosted
+# runner for the entire two-hour job budget, printing nothing, because the case
+# itself had already passed and only the cleanup was stuck. When the kill does
+# time out the socket is unlinked so the next case starts a fresh server rather
+# than queueing behind the wedged one. The whole suite finishes in about three
+# minutes on four processors, so a deadline well above that ends a stall with a
+# message instead of letting it consume the job.
 RUN set -e; \
     cd /src/regress; \
     export TERM=screen HOME=/root TEST_TMUX=/src/tmux; \
+    reset_server() { \
+        timeout -k 5 15 /src/tmux -Ltest kill-server 2>/dev/null || true; \
+        rm -f /tmp/tmux-*/test 2>/dev/null || true; \
+    }; \
+    deadline=$(( $(date +%s) + 1500 )); \
     pass=0; fail=0; flaky=""; failed=""; \
     for t in *.sh; do \
+        if [ "$(date +%s)" -ge "${deadline}" ]; then \
+            echo "tmux regress: deadline exceeded with ${t} still to run"; exit 1; \
+        fi; \
         attempt=1; ok=0; \
         while [ "${attempt}" -le 3 ]; do \
-            if timeout 120 sh "${t}" > "/tmp/regress-${t}.log" 2>&1; then \
+            if timeout -k 10 120 sh "${t}" > "/tmp/regress-${t}.log" 2>&1; then \
                 ok=1; \
                 if [ "${attempt}" -gt 1 ]; then flaky="${flaky} ${t}(${attempt})"; fi; \
                 break; \
             fi; \
-            /src/tmux -Ltest kill-server 2>/dev/null || true; \
+            reset_server; \
             attempt=$((attempt + 1)); \
         done; \
         if [ "${ok}" -eq 1 ]; then \
@@ -225,7 +243,7 @@ RUN set -e; \
             fail=$((fail + 1)); failed="${failed} ${t}"; \
             echo "--- ${t} (failed 3 attempts) ---"; tail -20 "/tmp/regress-${t}.log"; \
         fi; \
-        /src/tmux -Ltest kill-server 2>/dev/null || true; \
+        reset_server; \
     done; \
     if [ -n "${flaky}" ]; then echo "tmux regress: passed on retry:${flaky}"; fi; \
     echo "tmux regress: ${pass} passed, ${fail} failed"; \
@@ -240,14 +258,14 @@ RUN set -e; \
 RUN set -e; \
     export TERM=xterm-256color HOME=/root; \
     rm -f /tmp/attach.out; \
-    /src/tmux -Lattach -f /dev/null new-session -d -s a sh; \
+    timeout -k 5 30 /src/tmux -Lattach -f /dev/null new-session -d -s a sh; \
     sleep 1; \
     script -qec "/src/tmux -Lattach attach -t a" /dev/null > /tmp/attach-client.log 2>&1 & \
     sleep 3; \
-    /src/tmux -Lattach send-keys -t a "echo ATTACH_PTY_OK > /tmp/attach.out" Enter; \
+    timeout -k 5 30 /src/tmux -Lattach send-keys -t a "echo ATTACH_PTY_OK > /tmp/attach.out" Enter; \
     sleep 3; \
-    /src/tmux -Lattach detach-client -s a 2>/dev/null || true; \
-    /src/tmux -Lattach kill-server 2>/dev/null || true; \
+    timeout -k 5 15 /src/tmux -Lattach detach-client -s a 2>/dev/null || true; \
+    timeout -k 5 15 /src/tmux -Lattach kill-server 2>/dev/null || true; \
     grep -Fq ATTACH_PTY_OK /tmp/attach.out \
         || { echo "attach/pty test failed"; cat /tmp/attach-client.log; exit 1; }; \
     echo "tmux attached over a pty and ran a command in a pane"
@@ -262,10 +280,11 @@ RUN set -e; \
     mv /etc/terminfo /etc/terminfo.hidden 2>/dev/null || true; \
     mv /deps/share/terminfo /deps/share/terminfo.hidden 2>/dev/null || true; \
     TERMINFO=/nonexistent TERMINFO_DIRS=/nonexistent \
-        /src/tmux -Lnoterminfo -f /dev/null new-session -d -s t sh; \
+        timeout -k 5 30 /src/tmux -Lnoterminfo -f /dev/null new-session -d -s t sh; \
     TERMINFO=/nonexistent TERMINFO_DIRS=/nonexistent \
-        /src/tmux -Lnoterminfo list-sessions | grep -Fq "t:"; \
-    /src/tmux -Lnoterminfo kill-server 2>/dev/null || true; \
+        timeout -k 5 30 /src/tmux -Lnoterminfo list-sessions > /tmp/noterminfo.sessions; \
+    grep -Fq "t:" /tmp/noterminfo.sessions; \
+    timeout -k 5 15 /src/tmux -Lnoterminfo kill-server 2>/dev/null || true; \
     mv /usr/share/terminfo.hidden /usr/share/terminfo 2>/dev/null || true; \
     mv /etc/terminfo.hidden /etc/terminfo 2>/dev/null || true; \
     mv /deps/share/terminfo.hidden /deps/share/terminfo 2>/dev/null || true; \
@@ -304,12 +323,13 @@ RUN strip --strip-debug /artifact/bin/* \
 # The stripped copy is what ships, so it is the one exercised here.
 RUN set -e; \
     export TERM=xterm-256color HOME=/root; \
-    /artifact/bin/tmux -V; \
-    /artifact/bin/tmux -Lship -f /dev/null new-session -d -s s sh; \
-    /artifact/bin/tmux -Lship send-keys -t s "echo SHIPPED_TMUX_OK" Enter; \
+    timeout -k 5 30 /artifact/bin/tmux -V; \
+    timeout -k 5 30 /artifact/bin/tmux -Lship -f /dev/null new-session -d -s s sh; \
+    timeout -k 5 30 /artifact/bin/tmux -Lship send-keys -t s "echo SHIPPED_TMUX_OK" Enter; \
     sleep 1; \
-    /artifact/bin/tmux -Lship capture-pane -t s -p | grep -Fq SHIPPED_TMUX_OK; \
-    /artifact/bin/tmux -Lship kill-server; \
+    timeout -k 5 30 /artifact/bin/tmux -Lship capture-pane -t s -p > /tmp/ship.pane; \
+    grep -Fq SHIPPED_TMUX_OK /tmp/ship.pane; \
+    timeout -k 5 15 /artifact/bin/tmux -Lship kill-server; \
     echo "shipped tmux ran a command in a pane"
 
 FROM scratch AS artifact
