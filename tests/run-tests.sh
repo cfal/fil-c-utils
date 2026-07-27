@@ -56,11 +56,18 @@ do_alignment() {
     # Two defects that compile cleanly and only abort later: a pointer field at
     # an unaligned offset, and an intrinsic Fil-C could not lower. Both are
     # visible in the binary without the input, or the CPU, that would hit them.
+    # The walk is recursive because git keeps a good part of itself in
+    # libexec/git-core, and several of those are real programs rather than hard
+    # links to git: the ones that speak HTTP are linked against curl and
+    # OpenSSL, which is where an unlowered intrinsic would sit unnoticed.
+    # One path per inode, since scanning the hard links as well would mean
+    # reading the same large binary dozens of times.
     local bins=()
     local b
-    for b in "${FILC_OUT}"/*; do
-        [[ -f "$b" && -x "$b" && ! -L "$b" ]] && bins+=("$b")
-    done
+    while IFS= read -r b; do
+        bins+=("$b")
+    done < <(find "${FILC_OUT}" -type f -perm -u+x -printf '%i\t%p\n' \
+                 | sort -u -k1,1 | cut -f2-)
     local report="${WORK_DIR}/alignment.txt"
     local status=0
     python3 "${TESTS_DIR}/scan-alignment.py" "${bins[@]}" > "${report}" || status=$?

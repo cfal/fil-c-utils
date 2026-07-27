@@ -220,6 +220,22 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/tmux-tests.tar.gz \
 # no timeout of its own: leaving a wedged second server behind meant the retry
 # blocked there instead, so all three attempts hung and the retry was worthless.
 # Walking the socket directory covers whatever names the suite grows next.
+#
+# tty-keys stalling is tolerated, and only stalling, and only for that case.
+# It drives keystrokes through a client attached inside a pane, and on about a
+# third of hosted runners it parks on the C-s assertion and never returns:
+# C-s is XOFF, so a terminal that still honours flow control stops instead of
+# forwarding it, and the script waits on a background job that cannot finish.
+# It is upstream's test and upstream's fixed one-second wait for that client;
+# it does not reproduce here across processor counts or under buildkit, and it
+# is decided per runner rather than per attempt, so retrying it in the same job
+# never helps -- three attempts stall identically, 130s apart.
+#
+# The tolerance is deliberately narrow. Only a timeout counts, so tty-keys
+# failing an assertion still fails the build and a genuine regression in key
+# parsing is still caught; every other case still fails on a stall, so a real
+# deadlock elsewhere is not swallowed. The last attempt runs verbose and its
+# final assertions are printed, which is what named C-s as the sticking point.
 RUN set -e; \
     cd /src/regress; \
     export TERM=screen HOME=/root TEST_TMUX=/src/tmux; \
@@ -231,14 +247,18 @@ RUN set -e; \
         done; \
     }; \
     deadline=$(( $(date +%s) + 1500 )); \
-    pass=0; fail=0; flaky=""; failed=""; \
+    pass=0; fail=0; flaky=""; failed=""; stalled=""; \
     for t in *.sh; do \
         if [ "$(date +%s)" -ge "${deadline}" ]; then \
             echo "tmux regress: deadline exceeded with ${t} still to run"; exit 1; \
         fi; \
-        attempt=1; ok=0; \
+        attempt=1; ok=0; rc=0; \
         while [ "${attempt}" -le 3 ]; do \
-            if timeout -k 10 120 sh "${t}" > "/tmp/regress-${t}.log" 2>&1; then \
+            verbose=""; \
+            if [ "${attempt}" -eq 3 ]; then verbose=1; fi; \
+            rc=0; \
+            VERBOSE="${verbose}" timeout -k 10 120 sh "${t}" > "/tmp/regress-${t}.log" 2>&1 || rc=$?; \
+            if [ "${rc}" -eq 0 ]; then \
                 ok=1; \
                 if [ "${attempt}" -gt 1 ]; then flaky="${flaky} ${t}(${attempt})"; fi; \
                 break; \
@@ -248,13 +268,18 @@ RUN set -e; \
         done; \
         if [ "${ok}" -eq 1 ]; then \
             pass=$((pass + 1)); \
+        elif [ "${t}" = tty-keys.sh ] && { [ "${rc}" -eq 124 ] || [ "${rc}" -eq 137 ]; }; then \
+            stalled="${stalled} ${t}"; \
+            echo "--- ${t} (stalled on this runner, tolerated) ---"; \
+            echo "last assertion reached:"; grep -E "^\[(PASS|FAIL)\]" "/tmp/regress-${t}.log" | tail -3; \
         else \
             fail=$((fail + 1)); failed="${failed} ${t}"; \
-            echo "--- ${t} (failed 3 attempts) ---"; tail -20 "/tmp/regress-${t}.log"; \
+            echo "--- ${t} (failed 3 attempts, rc=${rc}) ---"; tail -20 "/tmp/regress-${t}.log"; \
         fi; \
         reset_server; \
     done; \
     if [ -n "${flaky}" ]; then echo "tmux regress: passed on retry:${flaky}"; fi; \
+    if [ -n "${stalled}" ]; then echo "tmux regress: stalled, tolerated:${stalled}"; fi; \
     echo "tmux regress: ${pass} passed, ${fail} failed"; \
     test "${fail}" -eq 0; \
     test "${pass}" -ge 30
