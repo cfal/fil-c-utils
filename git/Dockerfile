@@ -218,17 +218,21 @@ RUN patch --batch --forward -p1 < /tmp/git-filc.patch
 #   the prefix, which git's own defaults already are, so only prefix is set
 #   here. prefix is compiled in, which is why it belongs beside the flags
 #   rather than being passed at install time only.
-# SKIP_DASHED_BUILT_INS and INSTALL_SYMLINKS decide the size of the artifact,
-#   and by a wide margin. git installs a dashed alias of every built-in
-#   subcommand under libexec, upstream as hard links to the one binary it has
-#   already installed. Docker copies between stages in userspace and does not
-#   preserve hard links, so each of about a hundred and fifty aliases arrived
-#   as its own full copy of an eighty-eight megabyte executable, and the
-#   artifact was fourteen gigabytes of the same program. Not installing the
-#   aliases, and symlinking what is left, brings it under a gigabyte. Nothing
-#   this build can offer is lost with them: the dashed forms have been
-#   deprecated for years, `git foo` reaches every one of them, and the
-#   programs git genuinely runs as separate executables are still executables.
+# INSTALL_SYMLINKS decides the size of the artifact, and by a wide margin. git
+#   installs a dashed alias of every built-in subcommand under libexec,
+#   upstream as hard links to the one binary it has already installed. Docker
+#   copies between stages in userspace and does not preserve hard links, so
+#   each of about a hundred and fifty aliases arrived as its own full copy of
+#   an eighty-eight megabyte executable, and the artifact was fourteen
+#   gigabytes of the same program. Installed as symlinks instead they cost
+#   nothing, and the tree is under a gigabyte.
+#
+#   The aliases themselves have to stay. Not installing them at all is the
+#   larger saving on paper and it breaks git: cloning and pushing over the
+#   local and ssh transports runs `git-upload-pack` and `git-receive-pack` by
+#   name through a shell, so without those two files on disk a plain
+#   `git clone ./repo` fails with "git-upload-pack: not found". Symlinking
+#   gives the same size as dropping them, and keeps them working.
 RUN printf '%s\n' \
         'CC = /opt/filc/build/bin/clang' \
         'CFLAGS = -O2 -g -Wall -I/deps/include -Werror=int-conversion' \
@@ -251,7 +255,6 @@ RUN printf '%s\n' \
         'FSMONITOR_OS_SETTINGS =' \
         'prefix = /' \
         'RUNTIME_PREFIX = 1' \
-        'SKIP_DASHED_BUILT_INS = 1' \
         'INSTALL_SYMLINKS = 1' \
     > config.mak \
     && make -j"$(nproc)" all \
