@@ -297,18 +297,31 @@ RUN set -e; \
 # waited through. Polling turns each wait into a stated expectation, and the
 # dump on failure says whether the socket, the server or the client is the part
 # that went missing.
+#
+# It said the server was: a runner reached the client poll with the session
+# created, the client attached and a full screen drawn to it, and the server
+# gone ten seconds later, leaving its socket behind and printing nothing. A
+# server that forked into the background has no stderr left to print on, which
+# is why an abort there is silent, so it is started under -vv and the log it
+# writes is dumped on failure along with whether any tmux process survives.
 RUN set -e; \
     export TERM=xterm-256color HOME=/root; \
     rm -f /tmp/attach.out; \
+    rm -rf /tmp/tmuxlog; mkdir -p /tmp/tmuxlog; cd /tmp/tmuxlog; \
     diagnose() { \
         echo "attach/pty test failed: $1"; \
         echo "--- socket dir ---"; ls -la /tmp/tmux-*/ 2>&1 || true; \
+        echo "--- server process ---"; ps -o pid,stat,command -e 2>&1 | grep -F tmux || echo "(no tmux process alive)"; \
         echo "--- sessions ---"; timeout -k 5 10 /src/tmux -Lattach list-sessions 2>&1 || true; \
         echo "--- clients ---"; timeout -k 5 10 /src/tmux -Lattach list-clients 2>&1 || true; \
+        echo "--- server log tail ---"; \
+        for f in /tmp/tmuxlog/tmux-server*.log; do \
+            [ -f "${f}" ] || continue; echo "== ${f}"; tail -40 "${f}"; \
+        done; \
         echo "--- client log ---"; cat /tmp/attach-client.log 2>&1 || true; \
         exit 1; \
     }; \
-    timeout -k 5 30 /src/tmux -Lattach -f /dev/null new-session -d -s a sh; \
+    timeout -k 5 30 /src/tmux -Lattach -vv -f /dev/null new-session -d -s a sh; \
     n=0; \
     while ! timeout -k 5 10 /src/tmux -Lattach has-session -t a 2>/dev/null; do \
         n=$((n + 1)); [ "${n}" -lt 50 ] || diagnose "session never appeared"; sleep 0.2; \
