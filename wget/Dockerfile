@@ -89,9 +89,13 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/filc.tar.xz \
 ENV CC=/opt/filc/build/bin/clang
 ENV PKG_CONFIG_PATH=/deps/lib/pkgconfig
 
+# The release comes from GitHub rather than zlib.net: zlib.net returns HTTP 415
+# to some GitHub Actions runners, which fails the build on a host that is
+# otherwise reachable, while the madler/zlib release asset is byte-identical
+# (same SHA-256) and served reliably.
 WORKDIR /zlib
 RUN curl -fsSL ${FETCH_RETRY} -o /tmp/zlib.tar.gz \
-        "https://zlib.net/fossils/zlib-${ZLIB_VERSION}.tar.gz" \
+        "https://github.com/madler/zlib/releases/download/v${ZLIB_VERSION}/zlib-${ZLIB_VERSION}.tar.gz" \
     && echo "${ZLIB_SHA256}  /tmp/zlib.tar.gz" | sha256sum -c - \
     && tar --strip-components=1 -xzf /tmp/zlib.tar.gz \
     && rm /tmp/zlib.tar.gz

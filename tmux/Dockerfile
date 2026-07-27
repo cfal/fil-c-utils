@@ -264,19 +264,43 @@ RUN set -e; \
 # socket with SCM_RIGHTS. script(1) supplies a genuine pty, and a keystroke is
 # driven through the server into a shell in the pane, which only produces the
 # file if the descriptor passing, the pty and the fork all worked.
+#
+# Each stage waits for the state it needs rather than for a fixed number of
+# seconds. A hosted runner failed this at send-keys with "no server running":
+# the server was gone three seconds in and the step could only report which
+# command noticed, not why, because a blind sleep records nothing about what it
+# waited through. Polling turns each wait into a stated expectation, and the
+# dump on failure says whether the socket, the server or the client is the part
+# that went missing.
 RUN set -e; \
     export TERM=xterm-256color HOME=/root; \
     rm -f /tmp/attach.out; \
+    diagnose() { \
+        echo "attach/pty test failed: $1"; \
+        echo "--- socket dir ---"; ls -la /tmp/tmux-*/ 2>&1 || true; \
+        echo "--- sessions ---"; timeout -k 5 10 /src/tmux -Lattach list-sessions 2>&1 || true; \
+        echo "--- clients ---"; timeout -k 5 10 /src/tmux -Lattach list-clients 2>&1 || true; \
+        echo "--- client log ---"; cat /tmp/attach-client.log 2>&1 || true; \
+        exit 1; \
+    }; \
     timeout -k 5 30 /src/tmux -Lattach -f /dev/null new-session -d -s a sh; \
-    sleep 1; \
+    n=0; \
+    while ! timeout -k 5 10 /src/tmux -Lattach has-session -t a 2>/dev/null; do \
+        n=$((n + 1)); [ "${n}" -lt 50 ] || diagnose "session never appeared"; sleep 0.2; \
+    done; \
     script -qec "/src/tmux -Lattach attach -t a" /dev/null > /tmp/attach-client.log 2>&1 & \
-    sleep 3; \
-    timeout -k 5 30 /src/tmux -Lattach send-keys -t a "echo ATTACH_PTY_OK > /tmp/attach.out" Enter; \
-    sleep 3; \
+    n=0; \
+    while [ "$(timeout -k 5 10 /src/tmux -Lattach list-clients -t a 2>/dev/null | wc -l)" -eq 0 ]; do \
+        n=$((n + 1)); [ "${n}" -lt 50 ] || diagnose "client never attached"; sleep 0.2; \
+    done; \
+    timeout -k 5 30 /src/tmux -Lattach send-keys -t a "echo ATTACH_PTY_OK > /tmp/attach.out" Enter \
+        || diagnose "send-keys failed"; \
+    n=0; \
+    while ! grep -Fq ATTACH_PTY_OK /tmp/attach.out 2>/dev/null; do \
+        n=$((n + 1)); [ "${n}" -lt 50 ] || diagnose "marker never written by the pane"; sleep 0.2; \
+    done; \
     timeout -k 5 15 /src/tmux -Lattach detach-client -s a 2>/dev/null || true; \
     timeout -k 5 15 /src/tmux -Lattach kill-server 2>/dev/null || true; \
-    grep -Fq ATTACH_PTY_OK /tmp/attach.out \
-        || { echo "attach/pty test failed"; cat /tmp/attach-client.log; exit 1; }; \
     echo "tmux attached over a pty and ran a command in a pane"
 
 # The compiled-in terminal descriptions are the only reason this binary works
