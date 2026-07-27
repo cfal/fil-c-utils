@@ -214,12 +214,21 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/tmux-tests.tar.gz \
 # than queueing behind the wedged one. The whole suite finishes in about three
 # minutes on four processors, so a deadline well above that ends a stall with a
 # message instead of letting it consume the job.
+#
+# Clear every socket rather than the one most cases use. Four cases open a
+# second server on -Ltest2, and tty-keys kills both at its own first line with
+# no timeout of its own: leaving a wedged second server behind meant the retry
+# blocked there instead, so all three attempts hung and the retry was worthless.
+# Walking the socket directory covers whatever names the suite grows next.
 RUN set -e; \
     cd /src/regress; \
     export TERM=screen HOME=/root TEST_TMUX=/src/tmux; \
     reset_server() { \
-        timeout -k 5 15 /src/tmux -Ltest kill-server 2>/dev/null || true; \
-        rm -f /tmp/tmux-*/test 2>/dev/null || true; \
+        for sock in /tmp/tmux-*/*; do \
+            [ -S "${sock}" ] || continue; \
+            timeout -k 5 15 /src/tmux -S "${sock}" kill-server 2>/dev/null || true; \
+            rm -f "${sock}" 2>/dev/null || true; \
+        done; \
     }; \
     deadline=$(( $(date +%s) + 1500 )); \
     pass=0; fail=0; flaky=""; failed=""; \
