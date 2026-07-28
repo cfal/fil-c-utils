@@ -13,6 +13,7 @@ ARG PCRE2_SHA256=c08ae2388ef333e8403e670ad70c0a11f1eed021fd88308d7e02f596fcd9dc1
 ARG EXPAT_VERSION=2.8.2
 ARG EXPAT_TAG=R_2_8_2
 ARG EXPAT_SHA256=ef7d1994f533c9e7343d6c19f31064fc8ebbcbcaa144be3812b4f43052a05f4c
+ARG GIT_TEST_JOBS=
 ARG GIT_VERSION=2.55.0
 ARG GIT_SHA256=457fdb04dc8728e007d4688695e6912e6f680727920f2a40bf11eacc17505357
 
@@ -364,10 +365,18 @@ RUN printf '%s\n' \
     > /usr/local/bin/git-test-one \
     && chmod +x /usr/local/bin/git-test-one
 
+ARG GIT_TEST_JOBS
+
+# The suite is bound by forking and file I/O rather than by CPU: each file runs
+# a shell that spends most of its life waiting on processes and the filesystem.
+# Tying the job count to core count therefore left the runner idle and the step
+# taking most of an hour. A flat oversubscription keeps work queued instead.
+# Overridable so the trade-off can be re-measured rather than assumed.
 RUN set -e; \
     cd t; \
-    jobs="$(( $(nproc) / 2 ))"; \
+    jobs="${GIT_TEST_JOBS:-16}"; \
     test "${jobs}" -ge 1 || jobs=1; \
+    started="$(date +%s)"; \
     ls t[0-9]*.sh > /tmp/git-test-files; \
     echo "running $(wc -l < /tmp/git-test-files) git test files with ${jobs} jobs"; \
     export GIT_TEST_OPTS='--no-chain-lint'; \
@@ -394,6 +403,7 @@ RUN set -e; \
         echo "PASSED ONLY ON RETRY: ${failed}"; \
     fi; \
     grep -E '^Files=|^Result:' /tmp/git-tests.log; \
+    echo "git test wall time: $(( $(date +%s) - started ))s with ${jobs} jobs on $(nproc) cpus"; \
     ran="$(sed -n 's/^Files=\([0-9][0-9]*\),.*/\1/p' /tmp/git-tests.log | tail -1)"; \
     echo "git test files run: ${ran}"; \
     test "${ran:-0}" -ge 1040
