@@ -10,9 +10,11 @@ ARG ZLIB_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
 # five of wget's own TLS tests then fail (pfs, tlsv1, tlsv1x, clientcert, crl),
 # and lowering the floor to accept that would be weakening a test to make a
 # build pass. 3.5 is a supported LTS branch, so waiting for upstream costs
-# nothing. Revisit when a wget release supports OpenSSL 4.
-ARG OPENSSL_VERSION=3.5.7
-ARG OPENSSL_SHA256=a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8
+# nothing, and check-versions.py tracks this pin against the 3.x line so its
+# security releases are still reported. Revisit when a wget release supports
+# OpenSSL 4.
+ARG OPENSSL_VERSION=3.6.3
+ARG OPENSSL_SHA256=243a86649cf6f23eeb6a2ff2456e09e5d77dd9018a54d3d96b0c6bdd6ba6c7f1
 ARG LIBUNISTRING_VERSION=1.4.2
 ARG LIBUNISTRING_SHA256=5b46e74377ed7409c5b75e7a96f95377b095623b689d8522620927964a41499c
 ARG LIBIDN2_VERSION=2.3.8
