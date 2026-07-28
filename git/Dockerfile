@@ -503,6 +503,32 @@ RUN set -e; \
     /tmp/relocated/bin/git log --oneline | grep -Fq 'relocated'; \
     echo "git resolves its exec-path from the binary location: ${found}"
 
+# A tool that cannot verify a real certificate is close to useless, and this
+# breaks silently: the default trust path is compiled into OpenSSL, so nothing
+# in the build output reveals it is wrong. wget shipped with exactly that fault,
+# reaching for a directory that exists only inside this image. The check runs
+# the installed binary with no flags and no environment, so it fails if the
+# default is wrong rather than if the caller forgot an option.
+#
+# A certificate error is deterministic, so it fails immediately; only a network
+# error is retried, which keeps a flaky runner from being reported as a trust
+# problem.
+RUN set -e; \
+    export GIT_EXEC_PATH=/artifact/libexec/git-core; \
+    ok=no; \
+    for _ in 1 2 3; do \
+        rm -rf /tmp/tls-clone; \
+        if /artifact/bin/git clone -q --depth 1 \
+                https://github.com/git/git /tmp/tls-clone 2>/tmp/tls.err; then \
+            ok=yes; break; \
+        fi; \
+        grep -qiE 'certificate|SSL' /tmp/tls.err && break; \
+        sleep 3; \
+    done; \
+    if [ "${ok}" != yes ]; then echo "HTTPS check failed:"; cat /tmp/tls.err; exit 1; fi; \
+    test -e /tmp/tls-clone/.git; \
+    echo "git clones over HTTPS using the system trust store"
+
 FROM scratch AS artifact
 
 ARG FILC_VERSION
