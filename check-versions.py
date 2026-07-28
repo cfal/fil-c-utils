@@ -87,11 +87,17 @@ def newest(versions):
 
 
 # ----------------------------------------------------------------- upstreams
-def github_latest(repo, strip="", underscores=False):
+def github_latest(repo, strip="", underscores=False, series=None):
     """Newest non-prerelease tag for a GitHub repository.
 
     Prefers the release marked "latest"; falls back to the tag list for
     projects that publish releases without setting that flag.
+
+    `series` restricts the answer to one release line, for example "3." to stay
+    within OpenSSL 3.x.  A pin deliberately held back still needs its own line
+    watched, or its security releases go unnoticed: comparing a held 3.5.7
+    against 4.0.1 would report it behind for as long as the hold lasts and never
+    mention that 3.5.8 exists.
     """
     def norm(tag):
         if strip and tag.startswith(strip):
@@ -101,13 +107,16 @@ def github_latest(repo, strip="", underscores=False):
     try:
         tag = get_json(f"https://api.github.com/repos/{repo}/releases/latest")["tag_name"]
         version = norm(tag)
-        if is_stable(version):
+        if is_stable(version) and (series is None or version.startswith(series)):
             return version
     except RuntimeError:
         pass  # no "latest" release marked, or transient; try the tag list
 
     tags = get_json(f"https://api.github.com/repos/{repo}/tags")
-    return newest(norm(t["name"]) for t in tags)
+    names = (norm(t["name"]) for t in tags)
+    if series is not None:
+        names = (n for n in names if n.startswith(series))
+    return newest(names)
 
 
 def gnu_ftp(name, directory=None):
@@ -167,6 +176,13 @@ COMPONENTS = [
     ("openssl", "curl/Dockerfile",  "OPENSSL_VERSION",  lambda: github_latest("openssl/openssl", "openssl-")),
     ("zlib",    "curl/Dockerfile",  "ZLIB_VERSION",     lambda: github_latest("madler/zlib", "v")),
     ("wget",         "wget/Dockerfile", "WGET_VERSION",         lambda: gnu_ftp("wget")),
+    # wget has its own OpenSSL pin, held on 3.x because wget 1.25.0 cannot build
+    # against 4.x; see the comment beside the pin. It is checked against the 3.x
+    # line so its security releases are still reported, rather than against 4.x,
+    # which would report it behind for as long as the hold lasts and drown out a
+    # 3.5.8 when one appears.
+    ("openssl (wget)", "wget/Dockerfile", "OPENSSL_VERSION",
+     lambda: github_latest("openssl/openssl", "openssl-", series="3.")),
     ("libunistring", "wget/Dockerfile", "LIBUNISTRING_VERSION", lambda: gnu_ftp("libunistring")),
     ("libidn2",      "wget/Dockerfile", "LIBIDN2_VERSION",      lambda: gnu_ftp("libidn2", directory="libidn")),
     ("libpsl",       "wget/Dockerfile", "LIBPSL_VERSION",       lambda: github_latest("rockdaboot/libpsl")),
