@@ -2,8 +2,15 @@
 
 ARG FILC_VERSION=0.681
 ARG FILC_SHA256=84272acf017fe76bddb32bb3865f3d97ce332eb6e6a17fc1c07a8eb9ad777787
-ARG ZLIB_VERSION=1.3.1
-ARG ZLIB_SHA256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
+ARG ZLIB_VERSION=1.3.2
+ARG ZLIB_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
+# Held on OpenSSL 3.x while curl and git use 4.x. wget 1.25.0, the current
+# release, does not support OpenSSL 4: it calls SSLv3_client_method, which 4.0
+# removed, so it does not even compile. Guarding that call gets it to build, but
+# five of wget's own TLS tests then fail (pfs, tlsv1, tlsv1x, clientcert, crl),
+# and lowering the floor to accept that would be weakening a test to make a
+# build pass. 3.5 is a supported LTS branch, so waiting for upstream costs
+# nothing. Revisit when a wget release supports OpenSSL 4.
 ARG OPENSSL_VERSION=3.5.7
 ARG OPENSSL_SHA256=a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8
 ARG LIBUNISTRING_VERSION=1.4.2
