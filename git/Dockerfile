@@ -2,12 +2,12 @@
 
 ARG FILC_VERSION=0.681
 ARG FILC_SHA256=84272acf017fe76bddb32bb3865f3d97ce332eb6e6a17fc1c07a8eb9ad777787
-ARG ZLIB_VERSION=1.3.1
-ARG ZLIB_SHA256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
-ARG OPENSSL_VERSION=3.5.7
-ARG OPENSSL_SHA256=a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8
-ARG CURL_VERSION=8.19.0
-ARG CURL_SHA256=4eb41489790d19e190d7ac7e18e82857cdd68af8f4e66b292ced562d333f11df
+ARG ZLIB_VERSION=1.3.2
+ARG ZLIB_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
+ARG OPENSSL_VERSION=4.0.1
+ARG OPENSSL_SHA256=2db3f3a0d6ea4b59e1f094ace2c8cd536dffb87cdc39084c5afa1e6f7f37dd09
+ARG CURL_VERSION=8.21.0
+ARG CURL_SHA256=aa1b66a70eace83dc624508745646c08ae561de512ab403adffb93ac87fc72e6
 ARG PCRE2_VERSION=10.47
 ARG PCRE2_SHA256=c08ae2388ef333e8403e670ad70c0a11f1eed021fd88308d7e02f596fcd9dc16
 ARG EXPAT_VERSION=2.8.2
@@ -502,6 +502,32 @@ RUN set -e; \
     /tmp/relocated/bin/git commit -q -m 'commit from a relocated tree'; \
     /tmp/relocated/bin/git log --oneline | grep -Fq 'relocated'; \
     echo "git resolves its exec-path from the binary location: ${found}"
+
+# A tool that cannot verify a real certificate is close to useless, and this
+# breaks silently: the default trust path is compiled into OpenSSL, so nothing
+# in the build output reveals it is wrong. wget shipped with exactly that fault,
+# reaching for a directory that exists only inside this image. The check runs
+# the installed binary with no flags and no environment, so it fails if the
+# default is wrong rather than if the caller forgot an option.
+#
+# A certificate error is deterministic, so it fails immediately; only a network
+# error is retried, which keeps a flaky runner from being reported as a trust
+# problem.
+RUN set -e; \
+    export GIT_EXEC_PATH=/artifact/libexec/git-core; \
+    ok=no; \
+    for _ in 1 2 3; do \
+        rm -rf /tmp/tls-clone; \
+        if /artifact/bin/git clone -q --depth 1 \
+                https://github.com/git/git /tmp/tls-clone 2>/tmp/tls.err; then \
+            ok=yes; break; \
+        fi; \
+        grep -qiE 'certificate|SSL' /tmp/tls.err && break; \
+        sleep 3; \
+    done; \
+    if [ "${ok}" != yes ]; then echo "HTTPS check failed:"; cat /tmp/tls.err; exit 1; fi; \
+    test -e /tmp/tls-clone/.git; \
+    echo "git clones over HTTPS using the system trust store"
 
 FROM scratch AS artifact
 

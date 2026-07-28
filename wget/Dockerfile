@@ -2,10 +2,19 @@
 
 ARG FILC_VERSION=0.681
 ARG FILC_SHA256=84272acf017fe76bddb32bb3865f3d97ce332eb6e6a17fc1c07a8eb9ad777787
-ARG ZLIB_VERSION=1.3.1
-ARG ZLIB_SHA256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
-ARG OPENSSL_VERSION=3.5.7
-ARG OPENSSL_SHA256=a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8
+ARG ZLIB_VERSION=1.3.2
+ARG ZLIB_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
+# Held on OpenSSL 3.x while curl and git use 4.x. wget 1.25.0, the current
+# release, does not support OpenSSL 4: it calls SSLv3_client_method, which 4.0
+# removed, so it does not even compile. Guarding that call gets it to build, but
+# five of wget's own TLS tests then fail (pfs, tlsv1, tlsv1x, clientcert, crl),
+# and lowering the floor to accept that would be weakening a test to make a
+# build pass. 3.5 is a supported LTS branch, so waiting for upstream costs
+# nothing, and check-versions.py tracks this pin against the 3.x line so its
+# security releases are still reported. Revisit when a wget release supports
+# OpenSSL 4.
+ARG OPENSSL_VERSION=3.6.3
+ARG OPENSSL_SHA256=243a86649cf6f23eeb6a2ff2456e09e5d77dd9018a54d3d96b0c6bdd6ba6c7f1
 ARG LIBUNISTRING_VERSION=1.4.2
 ARG LIBUNISTRING_SHA256=5b46e74377ed7409c5b75e7a96f95377b095623b689d8522620927964a41499c
 ARG LIBIDN2_VERSION=2.3.8
@@ -193,7 +202,7 @@ RUN ./Configure linux-x86_64 \
         no-docs \
         no-engine \
         --prefix=/deps \
-        --openssldir=/deps/ssl \
+        --openssldir=/etc/ssl \
         --libdir=lib \
         -DOPENSSL_NO_SECURE_MEMORY \
         -O2 -g \
@@ -325,6 +334,28 @@ RUN strip --strip-debug /artifact/bin/* \
         grep -Fq "static-pie linked" /tmp/art.desc || exit 1; \
     done \
     && echo "artifact binaries stripped of debug info, Fil-C symbols retained"
+
+# A tool that cannot verify a real certificate is close to useless, and this
+# breaks silently: the default trust path is compiled into OpenSSL, so nothing
+# in the build output reveals it is wrong. wget shipped with exactly that fault,
+# reaching for a directory that exists only inside this image. The check runs
+# the installed binary with no flags and no environment, so it fails if the
+# default is wrong rather than if the caller forgot an option.
+#
+# A certificate error is deterministic, so it fails immediately; only a network
+# error is retried, which keeps a flaky runner from being reported as a trust
+# problem.
+RUN set -e; \
+    ok=no; \
+    for _ in 1 2 3; do \
+        if /artifact/bin/wget -q --spider https://github.com/ 2>/tmp/tls.err; then \
+            ok=yes; break; \
+        fi; \
+        grep -qiE 'cannot verify|certificate' /tmp/tls.err && break; \
+        sleep 3; \
+    done; \
+    if [ "${ok}" != yes ]; then echo "HTTPS check failed:"; cat /tmp/tls.err; exit 1; fi; \
+    echo "wget verifies a public certificate from the system trust store"
 
 FROM scratch AS artifact
 
