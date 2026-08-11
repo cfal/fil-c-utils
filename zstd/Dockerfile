@@ -1,14 +1,17 @@
 # syntax=docker/dockerfile:1
 
 ARG FILC_VERSION=0.683
-ARG FILC_SHA256=0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6
+ARG FILC_X86_64_SHA256=0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6
+ARG FILC_AARCH64_SHA256=405bcd4ea69bed4542581cd917581b2a34ae8e363cc5c76b701f27585de60e66
 ARG ZSTD_VERSION=1.5.7
 ARG ZSTD_SHA256=eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3
 
 FROM ubuntu:24.04 AS build
 
+ARG TARGETARCH
 ARG FILC_VERSION
-ARG FILC_SHA256
+ARG FILC_X86_64_SHA256
+ARG FILC_AARCH64_SHA256
 ARG ZSTD_VERSION
 ARG ZSTD_SHA256
 
@@ -37,9 +40,14 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/filc
-RUN curl -fsSL ${FETCH_RETRY} -o /tmp/filc.tar.xz \
-        "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/filc-${FILC_VERSION}-linux-x86_64.tar.xz" \
-    && echo "${FILC_SHA256}  /tmp/filc.tar.xz" | sha256sum -c - \
+RUN case "${TARGETARCH}" in \
+        amd64) filc_arch=x86_64; filc_sha256="${FILC_X86_64_SHA256}" ;; \
+        arm64) filc_arch=aarch64; filc_sha256="${FILC_AARCH64_SHA256}" ;; \
+        *) echo "unsupported target architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL ${FETCH_RETRY} -o /tmp/filc.tar.xz \
+        "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/filc-${FILC_VERSION}-linux-${filc_arch}.tar.xz" \
+    && echo "${filc_sha256}  /tmp/filc.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/filc.tar.xz \
     && ./setup.sh \
     && rm /tmp/filc.tar.xz
