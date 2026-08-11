@@ -991,6 +991,11 @@ parameters by value. `ZSTD_parameters` normally places that member at offset
 bytes under Fil-C. Dictionary training exercises this path in the upstream
 suite.
 
+FastCover and the legacy dictionary builder likewise nest a 12-byte parameter
+block at offsets 44 and 4. Those members are aligned under Fil-C on ARM64,
+growing the structures from 56 to 64 bytes and 16 to 24 bytes respectively.
+The regular COVER layout already has the required alignment.
+
 nano is the second utility with dependencies, and like curl it builds them with
 the same compiler into a shared `/deps` prefix: ncurses for the terminal and
 libmagic, from the `file` project, for content-based syntax detection. Both are
