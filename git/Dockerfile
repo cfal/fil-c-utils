@@ -483,7 +483,8 @@ RUN find /artifact/bin /artifact/libexec -type f -perm -u+x -print0 \
 
 # The shipped, stripped copy is exercised rather than the build tree, so this
 # covers the install layout and the strip in one step. A program that is built
-# and checked but never run can ship unable to do its job.
+# and checked but never run can ship unable to do its job. Capture command
+# output before grep: with pipefail, grep -q exiting early exposes git's SIGPIPE.
 RUN set -e; \
     export HOME=/tmp/githome; \
     mkdir -p "${HOME}"; \
@@ -497,9 +498,11 @@ RUN set -e; \
     /artifact/bin/git commit -q -m 'initial commit'; \
     /artifact/bin/git tag -a v1 -m 'a tag'; \
     test "$(/artifact/bin/git tag -n | wc -l)" -eq 1; \
-    /artifact/bin/git log --oneline | grep -Fq 'initial commit'; \
+    /artifact/bin/git log --oneline > /tmp/smoke.log; \
+    grep -Fq 'initial commit' /tmp/smoke.log; \
     printf 'second\n' >> file.txt; \
-    /artifact/bin/git diff --stat | grep -Fq file.txt; \
+    /artifact/bin/git diff --stat > /tmp/smoke.diff; \
+    grep -Fq file.txt /tmp/smoke.diff; \
     /artifact/bin/git grep -P 'he.lo' -- file.txt; \
     /artifact/bin/git clone -q . /tmp/smoke-clone; \
     test -f /tmp/smoke-clone/file.txt; \
