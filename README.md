@@ -969,6 +969,11 @@ assembly block and several optional alignment blocks that do not honor
 `ZSTD_DISABLE_ASM`, so the local patch extends those guards and selects the
 existing portable C implementation.
 
+On ARM64, `ZSTD_NO_INTRINSICS` also selects Zstandard's portable SWAR row
+matcher. Its NEON matcher uses structured `ld2` and `ld4` loads that Fil-C
+0.683 compiles into unhandled-intrinsic traps. The flag is architecture-scoped,
+so x86 keeps its supported SIMD matcher.
+
 nano is the second utility with dependencies, and like curl it builds them with
 the same compiler into a shared `/deps` prefix: ncurses for the terminal and
 libmagic, from the `file` project, for content-based syntax detection. Both are
