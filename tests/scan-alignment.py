@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Static checks that do not need the input, or the CPU, that would trip them.
 
-Two defects share a shape: they compile cleanly, survive every functional test,
+Three defects share a shape: they compile cleanly, survive functional tests,
 and then abort at run time on a machine or an input that reaches them.
 
   misaligned pointer field
@@ -15,12 +15,18 @@ and then abort at run time on a machine or an input that reaches them.
       implementation from CPUID only reach those traps on a CPU with the
       relevant feature, so a build can be clean on one machine and abort on
       another.  The embedded strings are visible without that CPU.
+
+  unsupported inline assembly
+      Fil-C likewise leaves a trap when a target cannot compile an inline
+      assembly block.  Optional architecture-specific paths can hide it until
+      a particular input selects them.
 """
 import re, subprocess, sys
 from pathlib import Path
 
 PTR_ALIGN = 8
 INTRINSIC = re.compile(rb"@llvm\.[a-z0-9._]+")
+INLINE_ASM = b"cannot handle inline asm"
 
 
 def dwarf(binary):
@@ -115,6 +121,11 @@ def unhandled_intrinsics(binary):
     return sorted({m.decode() for m in INTRINSIC.findall(binary.read_bytes())})
 
 
+def has_unsupported_inline_asm(binary):
+    """Whether Fil-C compiled unsupported inline assembly into a trap."""
+    return INLINE_ASM in binary.read_bytes()
+
+
 def has_dwarf(binary):
     """Whether the binary still carries the debug info this scan reads.
 
@@ -146,13 +157,16 @@ def main():
             stripped.append(p.name)
         misaligned = sorted(set(scan(p))) if scannable else []
         intrinsics = unhandled_intrinsics(p)
+        inline_asm = has_unsupported_inline_asm(p)
 
         notes = []
         if misaligned:
             notes.append(f"{len(misaligned)} misaligned pointer field(s)")
         if intrinsics:
             notes.append(f"{len(intrinsics)} unhandled intrinsic(s)")
-        findings += len(misaligned) + len(intrinsics)
+        if inline_asm:
+            notes.append("unsupported inline assembly")
+        findings += len(misaligned) + len(intrinsics) + int(inline_asm)
 
         if not scannable:
             notes.append("no debug info, alignment not scanned")
@@ -161,6 +175,8 @@ def main():
             print(f"                 {s}.{mem} @ offset {off}")
         for name in intrinsics:
             print(f"                 {name}")
+        if inline_asm:
+            print("                 Fil-C cannot handle inline asm")
 
     if stripped:
         print(f"\n{len(stripped)} binary(ies) carry no debug info, so nothing was "

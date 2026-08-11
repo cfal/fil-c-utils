@@ -53,9 +53,9 @@ wanted() {
 }
 
 do_alignment() {
-    # Two defects that compile cleanly and only abort later: a pointer field at
-    # an unaligned offset, and an intrinsic Fil-C could not lower. Both are
-    # visible in the binary without the input, or the CPU, that would hit them.
+    # Three defects that compile cleanly and only abort later: a pointer field at
+    # an unaligned offset, an intrinsic Fil-C could not lower, and unsupported
+    # inline assembly. All are visible without the input or CPU that hits them.
     # The walk is recursive because git keeps a good part of itself in
     # libexec/git-core, and several of those are real programs rather than hard
     # links to git: the ones that speak HTTP are linked against curl and
@@ -88,16 +88,16 @@ do_alignment() {
         printf 'FAIL: rebuild the affected utility; its Fil-C patch is not in effect\n'
         return 1
     fi
-    if grep -q 'unhandled intrinsic' "${report}"; then
-        printf 'FAIL: an intrinsic Fil-C cannot lower is compiled in. It aborts on\n'
-        printf '      any CPU whose features select that path, whatever this one does.\n'
+    if grep -Eq 'unhandled intrinsic|unsupported inline assembly' "${report}"; then
+        printf 'FAIL: code Fil-C cannot lower is compiled in. It aborts when an\n'
+        printf '      input or CPU feature selects that path.\n'
         return 1
     fi
     if [[ "${status}" -eq 2 ]]; then
-        printf 'PARTIAL: no unhandled intrinsics; alignment needs an unstripped build\n'
+        printf 'PARTIAL: no compiler traps; alignment needs an unstripped build\n'
         return 0
     fi
-    printf 'PASS: no unaligned pointer fields, no unhandled intrinsics\n'
+    printf 'PASS: no unaligned pointer fields or compiler traps\n'
 }
 
 do_corpus() {
