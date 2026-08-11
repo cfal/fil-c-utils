@@ -119,12 +119,15 @@ emit fmt-rpm.rpm Rpm sh -c "
 
 # ---- executables and encodings ---------------------------------------------
 # 7-Zip parses PE and ELF to find self-extracting payloads, so both are live
-# attack surface even though neither is an archive.
+# attack surface even though neither is an archive. The executable is native;
+# cross-binutils keeps the x86 object and PE fixtures identical on ARM hosts.
 emit fmt-elf.elf ELF     cp /bin/true "${OUT}/fmt-elf.elf"
-emit fmt-elf-obj.obj ELF sh -c "cp /usr/lib/x86_64-linux-gnu/crt1.o '${OUT}/fmt-elf-obj.obj' 2>/dev/null \
-    || objcopy -O elf64-x86-64 /bin/true '${OUT}/fmt-elf-obj.obj'"
-emit fmt-pe64.exe PE    objcopy -O pei-x86-64 /bin/true "${OUT}/fmt-pe64.exe"
-emit fmt-pe32.exe PE    objcopy -O pei-i386   /bin/true "${OUT}/fmt-pe32.exe"
+emit fmt-elf-obj.obj ELF x86_64-linux-gnu-objcopy -I binary -O elf64-x86-64 \
+    -B i386:x86-64 "${SRC}/text.txt" "${OUT}/fmt-elf-obj.obj"
+emit fmt-pe64.exe PE x86_64-linux-gnu-ld -m i386pep -e 0 -b binary \
+    "${SRC}/text.txt" -o "${OUT}/fmt-pe64.exe"
+emit fmt-pe32.exe PE x86_64-linux-gnu-ld -m i386pe -e 0 -b binary \
+    "${SRC}/text.txt" -o "${OUT}/fmt-pe32.exe"
 emit fmt-ihex.ihex IHex   objcopy -O ihex /bin/true "${OUT}/fmt-ihex.ihex"
 emit fmt-base64.b64 Base64  sh -c "base64 '${SRC}/random.bin' > '${OUT}/fmt-base64.b64'"
 
