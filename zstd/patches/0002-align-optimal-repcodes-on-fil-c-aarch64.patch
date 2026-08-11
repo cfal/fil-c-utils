@@ -1,0 +1,23 @@
+From: fil-c-utils maintainers
+Subject: [PATCH] Align optimal-parser repcodes under Fil-C on AArch64
+
+Clang widens the optimal parser's 12-byte repcode copies to include an
+8-byte access on AArch64. ZSTD_optimal_t is otherwise 28 bytes, so the repcode
+array in every other table entry is only 4-byte aligned and Fil-C rejects the
+widened access. Give that member 8-byte alignment under Fil-C on AArch64,
+padding each table entry to 32 bytes without changing the parser's behavior.
+
+--- a/lib/compress/zstd_compress_internal.h
++++ b/lib/compress/zstd_compress_internal.h
+@@ -218,7 +218,11 @@ typedef struct {
+     U32 off;    /* offset of previous match */
+     U32 mlen;   /* length of previous match */
+     U32 litlen; /* nb of literals since previous match */
++#if defined(__FILC__) && defined(__aarch64__)
++    U32 rep[ZSTD_REP_NUM] ZSTD_ALIGNED(8);  /* offset history after previous match */
++#else
+     U32 rep[ZSTD_REP_NUM];  /* offset history after previous match */
++#endif
+ } ZSTD_optimal_t;
+ 
+ typedef enum { zop_dynamic=0, zop_predef } ZSTD_OptPrice_e;

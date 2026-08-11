@@ -62,6 +62,9 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/zstd.tar.gz \
 COPY patches/0001-honor-ZSTD_DISABLE_ASM-in-ZSTD_selectAddr.patch /tmp/zstd-fil-c.patch
 RUN patch --batch --forward -p1 < /tmp/zstd-fil-c.patch
 
+COPY patches/0002-align-optimal-repcodes-on-fil-c-aarch64.patch /tmp/zstd-fil-c-arm.patch
+RUN patch --batch --forward -p1 < /tmp/zstd-fil-c-arm.patch
+
 # Fil-C does not lower the structured NEON loads in Zstd's ARM row matcher and
 # leaves them as run-time traps. The upstream flag selects its SWAR matcher on
 # ARM only; x86 keeps the supported SIMD paths it already used.

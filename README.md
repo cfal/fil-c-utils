@@ -979,6 +979,12 @@ matcher. Its NEON matcher uses structured `ld2` and `ld4` loads that Fil-C
 0.683 compiles into unhandled-intrinsic traps. The flag is architecture-scoped,
 so x86 keeps its supported SIMD matcher.
 
+Zstandard's optimal parser also stores 12-byte repcode arrays in 28-byte table
+entries. Clang widens their copies to an 8-byte access on ARM64, leaving every
+other entry under-aligned for Fil-C. The ARM-specific patch aligns that member
+to 8 bytes and pads each entry to 32 bytes; the compression algorithm is
+unchanged, at a cost of about 16 KiB per optimal-parser table.
+
 nano is the second utility with dependencies, and like curl it builds them with
 the same compiler into a shared `/deps` prefix: ncurses for the terminal and
 libmagic, from the `file` project, for content-based syntax detection. Both are
