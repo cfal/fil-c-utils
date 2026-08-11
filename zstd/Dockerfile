@@ -83,7 +83,11 @@ RUN binary=/src/programs/zstd \
     && grep -Fq "pizlonated" /tmp/zstd.symbols \
     && grep -Eq "filc_call_user_main|zgc_alloc" /tmp/zstd.symbols \
     && strings -a "${binary}" > /tmp/zstd.strings \
-    && ! grep -q "@llvm\." /tmp/zstd.strings \
+    && if grep -q "@llvm\." /tmp/zstd.strings; then \
+        echo "unhandled LLVM intrinsics in ${binary}:"; \
+        grep -oE '@llvm\.[A-Za-z0-9._]+' /tmp/zstd.strings; \
+        exit 1; \
+    fi \
     && "${binary}" --version > /tmp/zstd.version \
     && grep -Fq "${ZSTD_VERSION}" /tmp/zstd.version \
     && "${binary}" -q -T2 -c README.md > /tmp/smoke.zst \
