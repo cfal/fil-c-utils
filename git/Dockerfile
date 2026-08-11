@@ -156,6 +156,8 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/curl.tar.xz \
     && echo "${CURL_SHA256}  /tmp/curl.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/curl.tar.xz \
     && rm /tmp/curl.tar.xz
+COPY patches/0002-use-sched-yield-under-fil-c-on-aarch64.patch /tmp/git-curl-fil-c.patch
+RUN patch --batch --forward -p1 < /tmp/git-curl-fil-c.patch
 RUN CFLAGS="-O2 -g" LDFLAGS="-L/deps/lib" ./configure \
         --disable-shared --enable-static --prefix=/deps \
         --with-openssl=/deps --with-zlib=/deps \
@@ -287,6 +289,7 @@ RUN for binary in git git-remote-http git-http-fetch git-daemon; do \
         grep -Eq "filc_call_user_main|zgc_alloc" "/tmp/${binary}.symbols"; \
         strings -a "${binary}" > "/tmp/${binary}.strings"; \
         ! grep -q "@llvm\." "/tmp/${binary}.strings"; \
+        ! grep -Fq "cannot handle inline asm" "/tmp/${binary}.strings"; \
     done \
     && ./git --version > /tmp/git.version \
     && grep -Fq "git version ${GIT_VERSION}" /tmp/git.version
