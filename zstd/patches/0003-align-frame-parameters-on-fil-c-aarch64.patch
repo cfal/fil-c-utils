@@ -1,0 +1,23 @@
+From: fil-c-utils maintainers
+Subject: [PATCH] Align frame parameters under Fil-C on AArch64
+
+The AArch64 ABI passes ZSTD_frameParameters' three 32-bit fields in an 8-byte
+chunk followed by a 4-byte chunk. Fil-C therefore requires an 8-byte-aligned
+destination when that by-value parameter is assigned. ZSTD_parameters places
+fParams after a 28-byte member, so align fParams under Fil-C on AArch64. This
+pads ZSTD_parameters to 48 bytes and leaves its values and behavior unchanged.
+
+--- a/lib/zstd.h
++++ b/lib/zstd.h
+@@ -1367,7 +1367,11 @@ typedef struct {
+ 
+ typedef struct {
+     ZSTD_compressionParameters cParams;
++#if defined(__FILC__) && defined(__aarch64__)
++    ZSTD_frameParameters fParams __attribute__((aligned(8)));
++#else
+     ZSTD_frameParameters fParams;
++#endif
+ } ZSTD_parameters;
+ 
+ typedef enum {

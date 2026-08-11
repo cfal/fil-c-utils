@@ -985,6 +985,12 @@ other entry under-aligned for Fil-C. The ARM-specific patch aligns that member
 to 8 bytes and pads each entry to 32 bytes; the compression algorithm is
 unchanged, at a cost of about 16 KiB per optimal-parser table.
 
+The same 8-byte chunking applies when Zstandard passes its 12-byte frame
+parameters by value. `ZSTD_parameters` normally places that member at offset
+28, so the ARM patch aligns it and grows the parameter structure from 40 to 48
+bytes under Fil-C. Dictionary training exercises this path in the upstream
+suite.
+
 nano is the second utility with dependencies, and like curl it builds them with
 the same compiler into a shared `/deps` prefix: ncurses for the terminal and
 libmagic, from the `file` project, for content-based syntax detection. Both are
