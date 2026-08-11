@@ -108,7 +108,11 @@ RUN binary=/src/CPP/7zip/Bundles/Alone2/_o/7zz \
     && "${binary}" a /tmp/smoke/archive.7z /tmp/smoke/input/readme.txt \
     && "${binary}" t /tmp/smoke/archive.7z \
     && "${binary}" x -o/tmp/smoke/output /tmp/smoke/archive.7z \
-    && cmp /tmp/smoke/input/readme.txt /tmp/smoke/output/readme.txt
+    && cmp /tmp/smoke/input/readme.txt /tmp/smoke/output/readme.txt \
+    && "${binary}" a -t7z -m0=Deflate /tmp/smoke/deflate.7z /tmp/smoke/input/readme.txt \
+    && "${binary}" t /tmp/smoke/deflate.7z \
+    && "${binary}" a -tzip /tmp/smoke/archive.zip /tmp/smoke/input/readme.txt \
+    && "${binary}" t /tmp/smoke/archive.zip
 
 RUN install -Dm755 CPP/7zip/Bundles/Alone2/_o/7zz /artifact/bin/7z \
     && ln -s 7z /artifact/bin/7zz \
