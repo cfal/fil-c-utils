@@ -1,6 +1,6 @@
 name: ci
 
-# build -> test -> bundle -> release.
+# build (x86_64 and aarch64) -> test -> bundle -> release.
 #
 # The test suite runs against the binaries that were just compiled, so it
 # cannot run before the build. Gating therefore sits on the bundle: nothing is
@@ -36,10 +36,16 @@ jobs:
     uses: ./.github/workflows/build.yml
 
   test:
-    name: test
-    runs-on: ubuntu-latest
+    name: test (${{ matrix.architecture }})
+    runs-on: ${{ matrix.architecture == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     needs: build
     timeout-minutes: 90
+    env:
+      PLATFORM: ${{ matrix.architecture == 'aarch64' && 'linux/arm64' || 'linux/amd64' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [x86_64, aarch64]
     steps:
       - uses: actions/checkout@v5
 
@@ -52,13 +58,13 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          pattern: stage-*
+          pattern: stage-${{ matrix.architecture }}-*
           path: stages
 
       - name: Assemble out/
         run: |
           mkdir -p out
-          for tarball in stages/stage-*/*.tar; do
+          for tarball in stages/stage-${{ matrix.architecture }}-*/*.tar; do
             tar -xf "${tarball}" -C out
           done
           find out -maxdepth 1 -mindepth 1 | sort
@@ -96,7 +102,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: findings-${{ github.run_id }}
+          name: findings-${{ matrix.architecture }}-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/fil-c-utils-tests/findings
             ${{ runner.temp }}/fil-c-utils-tests/fuzz.jsonl
@@ -105,23 +111,27 @@ jobs:
           if-no-files-found: ignore
 
   bundle:
-    name: bundle
-    runs-on: ubuntu-latest
+    name: bundle (${{ matrix.architecture }})
+    runs-on: ${{ matrix.architecture == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     needs: [build, test]
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [x86_64, aarch64]
     steps:
       # Needed for build-all.sh, which owns the list of expected commands.
       - uses: actions/checkout@v5
 
       - uses: actions/download-artifact@v8
         with:
-          pattern: stage-*
+          pattern: stage-${{ matrix.architecture }}-*
           path: stages
 
       - name: Merge build outputs
         run: |
           mkdir -p out
-          for tarball in stages/stage-*/*.tar; do
+          for tarball in stages/stage-${{ matrix.architecture }}-*/*.tar; do
             echo "unpacking ${tarball}"
             tar -xf "${tarball}" -C out
           done
@@ -187,6 +197,7 @@ jobs:
         env:
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
+          ARCHITECTURE: ${{ matrix.architecture }}
         run: |
           : "${GITHUB_SHA:?GITHUB_SHA is unset, refusing to build an unnamed artifact}"
           if [ "${REF_TYPE}" = 'tag' ]; then
@@ -194,7 +205,7 @@ jobs:
           else
             version="${GITHUB_SHA::7}"
           fi
-          name="fil-c-utils-${version}-x86_64"
+          name="fil-c-utils-${version}-${ARCHITECTURE}"
           mv out "${name}"
           tar -czf "${name}.tar.gz" \
             --owner=0 --group=0 --numeric-owner --sort=name "${name}"
@@ -212,8 +223,8 @@ jobs:
             ${{ steps.tarball.outputs.name }}.tar.gz.sha256
           if-no-files-found: error
 
-  # Only for v* tags. `needs: bundle` carries the whole chain with it, so a
-  # release can only exist for binaries that built, passed the suite, and
+  # Only for v* tags. `needs: bundle` carries both architecture chains with it,
+  # so a release can only exist when every binary built, passed the suite, and
   # cleared the artifact checks.
   release:
     name: release
