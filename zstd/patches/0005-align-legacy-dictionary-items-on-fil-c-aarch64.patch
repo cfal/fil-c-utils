@@ -1,0 +1,23 @@
+From: fil-c-utils maintainers
+Subject: [PATCH] Align legacy dictionary items under Fil-C on AArch64
+
+The legacy dictionary builder stores 12-byte dictItem values in a table and
+passes them by value. The AArch64 ABI copies each value as an 8-byte chunk and
+a 4-byte chunk, but the table's 12-byte stride leaves every other item only
+4-byte aligned. Align dictItem to 8 bytes under Fil-C on AArch64, padding each
+table entry to 16 bytes without changing its values or behavior.
+
+--- a/lib/dictBuilder/zdict.c
++++ b/lib/dictBuilder/zdict.c
+@@ -154,7 +154,11 @@ typedef struct {
+     U32 pos;
+     U32 length;
+     U32 savings;
++#if defined(__FILC__) && defined(__aarch64__)
++} ZSTD_ALIGNED(8) dictItem;
++#else
+ } dictItem;
++#endif
+ 
+ static void ZDICT_initDictItem(dictItem* d)
+ {

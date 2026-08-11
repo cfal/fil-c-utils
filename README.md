@@ -996,6 +996,10 @@ block at offsets 44 and 4. Those members are aligned under Fil-C on ARM64,
 growing the structures from 56 to 64 bytes and 16 to 24 bytes respectively.
 The regular COVER layout already has the required alignment.
 
+The legacy dictionary builder also keeps 12-byte items in a table and passes
+them by value. Its ARM patch gives those items 8-byte alignment, changing the
+table stride from 12 to 16 bytes so the ABI's widened copies remain aligned.
+
 nano is the second utility with dependencies, and like curl it builds them with
 the same compiler into a shared `/deps` prefix: ncurses for the terminal and
 libmagic, from the `file` project, for content-based syntax detection. Both are

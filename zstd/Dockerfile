@@ -71,6 +71,9 @@ RUN patch --batch --forward -p1 < /tmp/zstd-fil-c-arm-params.patch
 COPY patches/0004-align-nested-dictionary-parameters-on-fil-c-aarch64.patch /tmp/zstd-fil-c-arm-dict.patch
 RUN patch --batch --forward -p1 < /tmp/zstd-fil-c-arm-dict.patch
 
+COPY patches/0005-align-legacy-dictionary-items-on-fil-c-aarch64.patch /tmp/zstd-fil-c-arm-items.patch
+RUN patch --batch --forward -p1 < /tmp/zstd-fil-c-arm-items.patch
+
 # Fil-C does not lower the structured NEON loads in Zstd's ARM row matcher and
 # leaves them as run-time traps. The upstream flag selects its SWAR matcher on
 # ARM only; x86 keeps the supported SIMD paths it already used.
