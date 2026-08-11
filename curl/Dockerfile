@@ -187,6 +187,12 @@ RUN set -e; \
     make -C tests LDFLAGS="-Wc,-static -L/deps/lib" > /tmp/curl-tests-build.log 2>&1; \
     cd tests; \
     if ! ./runtests.pl -n -a -j"$(nproc)" > /tmp/curl-tests.log 2>&1; then \
+        failed="$(sed -n 's/^TESTFAIL: These test cases failed: *//p' \
+            /tmp/curl-tests.log | tail -1)"; \
+        if [ -n "${failed}" ]; then \
+            echo "re-running failed tests serially for diagnostics: ${failed}"; \
+            ./runtests.pl -n -a ${failed} || true; \
+        fi; \
         tail -40 /tmp/curl-tests.log; \
         exit 1; \
     fi; \
