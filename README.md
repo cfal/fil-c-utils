@@ -396,10 +396,10 @@ and the run says so; every other stage works from Python 3 alone.
 
 ### The alignment stage
 
-Two defects share an awkward shape: they compile cleanly, link cleanly, pass
-every functional test, and then abort at run time on a machine or an input that
-happens to reach them. This stage finds both by reading the binary, so neither
-needs the trigger to be reproduced.
+Three defects share an awkward shape: they compile cleanly, link cleanly, pass
+ordinary functional tests, and then abort at run time on a machine or an input
+that happens to reach them. This stage finds all three by reading the binary,
+so none needs the trigger to be reproduced.
 
 **Misaligned pointer fields.** Fil-C stores a capability beside every pointer
 slot and requires those slots to keep their natural alignment. A
@@ -414,9 +414,15 @@ only reached on a CPU that has the relevant feature, so a build can be clean on
 the developer's machine and abort on someone else's. The stage greps each
 binary for those embedded strings, which is visible without that CPU.
 
-Both checks are also asserted in every utility's Dockerfile, so a build that
-introduces either fails immediately rather than shipping. This is the cheapest
-stage and the one most worth running after any dependency upgrade.
+**Unsupported inline assembly.** On targets where Fil-C cannot lower an inline
+assembly block, it embeds a similar run-time trap. Optional architecture paths
+can hide it until a particular input selects them, so the stage also rejects
+Fil-C's inline-assembly trap marker.
+
+The compiler-trap checks are also asserted by the affected utility Dockerfiles,
+and compatibility patches have focused functional assertions. The shared stage
+is the backstop over every shipped executable and remains the cheapest one to
+run after a dependency upgrade.
 
 ### The roundtrip stage
 
@@ -650,7 +656,8 @@ RAR compression algorithm. Review `out/licenses/` before redistribution.
   built without the backend and reports `fsmonitor--daemon is not supported on
   this platform`. `core.fsmonitor` still works in its hook form, where the
   monitor is a program you name rather than one git runs itself. git shares
-  curl's no-assembly OpenSSL and the throughput and side-channel caveats above.
+  curl's no-assembly OpenSSL, ARM lock fallback, and the throughput and
+  side-channel caveats above.
   The Perl and Python subcommands are not exported: they are scripts, not
   executables, and this repository ships only the latter.
 - One thing to know about git under load: when many copies of it run at once,
@@ -882,7 +889,10 @@ the builder's loader or libraries are available.
 
 7-Zip's x86 feature detection normally uses inline CPUID and XGETBV assembly.
 Its patch substitutes Fil-C's supported intrinsic interfaces on x86 only; ARM64
-keeps 7-Zip's native architecture paths. The build also defines
+keeps 7-Zip's native architecture paths. One of those paths uses the inline ARM
+`rbit` instruction in the Deflate decoder, which Fil-C 0.683 cannot lower. An
+ARM-only patch selects 7-Zip's existing bit-reversal table instead, and the
+Dockerfile gates both Deflate-in-7z and ZIP decoding. The build also defines
 `Z7_NO_LARGE_PAGES`; 7-Zip's 2 MiB alignment request exceeds Fil-C's supported
 allocation alignment.
 
@@ -959,7 +969,8 @@ replaces what configure recorded, so `-L/deps/lib` has to be repeated.
 On ARM64, curl's global-init lock normally uses an inline `yield` instruction
 that Fil-C compiles into a run-time trap. The local patch excludes that
 optional assembly under Fil-C and selects curl's existing `sched_yield()`
-fallback. Curl's thread-safety test exercises the patched lock.
+fallback. Curl's thread-safety test exercises the patched lock. Git statically
+links its own libcurl and applies the same patch.
 
 The CA bundle is not embedded. curl's `--with-ca-embed` would compile a copy
 into the executable, but it prefers that copy over the system store rather than
