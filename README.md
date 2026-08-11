@@ -1000,6 +1000,10 @@ The legacy dictionary builder also keeps 12-byte items in a table and passes
 them by value. Its ARM patch gives those items 8-byte alignment, changing the
 table stride from 12 to 16 bytes so the ABI's widened copies remain aligned.
 
+Long-distance matching uses another internal table of 12-byte raw sequences.
+Those entries receive the same ARM-only alignment and 16-byte stride because
+the matcher reads them by value.
+
 nano is the second utility with dependencies, and like curl it builds them with
 the same compiler into a shared `/deps` prefix: ncurses for the terminal and
 libmagic, from the `file` project, for content-based syntax detection. Both are
