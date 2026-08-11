@@ -73,6 +73,11 @@ RUN for source in C/AesOpt.c C/Aes.c C/Blake2s.c C/LzFind.c C/SwapBytes.c \
     done \
     && patch --batch --forward -p1 < /tmp/7zip-no-avx.patch
 
+COPY patches/0003-use-portable-bit-reversal-on-fil-c-aarch64.patch /tmp/7zip-fil-c-arm.patch
+RUN chmod u+w CPP/7zip/Compress/BitlDecoder.h \
+    && sed -i 's/\r$//' CPP/7zip/Compress/BitlDecoder.h \
+    && patch --batch --forward -p1 < /tmp/7zip-fil-c-arm.patch
+
 WORKDIR /src/CPP/7zip/Bundles/Alone2
 RUN make -f makefile.gcc -j"$(nproc)" \
         CC=/opt/filc/build/bin/clang \
@@ -102,6 +107,7 @@ RUN binary=/src/CPP/7zip/Bundles/Alone2/_o/7zz \
     && grep -Eq "filc_call_user_main|zgc_alloc" /tmp/7z.symbols \
     && strings -a "${binary}" > /tmp/7z.strings \
     && ! grep -q "@llvm\." /tmp/7z.strings \
+    && ! grep -Fq "cannot handle inline asm" /tmp/7z.strings \
     && "${binary}" i >/dev/null \
     && mkdir -p /tmp/smoke/input /tmp/smoke/output \
     && cp DOC/readme.txt /tmp/smoke/input/readme.txt \
