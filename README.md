@@ -36,8 +36,8 @@ size limits, path validation, or timely dependency updates.
 Requirements:
 
 - Docker with BuildKit support
-- An x86-64 Linux host, or an environment capable of building
-  `--platform linux/amd64` images
+- An x86-64 or ARM64 Linux host, or an environment capable of building
+  `--platform linux/amd64` or `--platform linux/arm64` images
 - Network access to the pinned upstream release files and Ubuntu package
   repositories
 
@@ -107,8 +107,9 @@ out/
     └── zstd/
 ```
 
-The executables are x86-64 static PIEs and have no ELF program interpreter.
-They can run directly from `out/`:
+The executables are native x86-64 or ARM64 static PIEs, according to the
+selected build platform, and have no ELF program interpreter. They can run
+directly from `out/`:
 
 ```sh
 ./out/bin/7z t archive.7z
@@ -158,11 +159,13 @@ are built in. What it does need from the host is a shell: panes run
 `$SHELL`, or `/bin/sh` if that is unset, so the scratch image below can report
 its version but cannot open a pane.
 
-Set `PLATFORM` to override the Docker platform. The pinned Fil-C release is
-currently provided only for `linux/amd64`:
+`linux/amd64` remains the default. Set `PLATFORM` to build the native ARM64
+artifacts instead; Fil-C publishes checksum-pinned Pizfix/musl distributions
+for both platforms:
 
 ```sh
 PLATFORM=linux/amd64 ./build-all.sh
+PLATFORM=linux/arm64 ./build-all.sh
 ```
 
 ## Using compressed tar archives
@@ -206,6 +209,7 @@ Replace `gzip` with `7z`, `unrar`, `tar`, `bzip2`, `xz`, `zstd`, `curl`, `wget`,
 `nano`, `tmux`, or `git`. Docker merges an individual artifact tree into an
 existing destination, so old files may remain. `build-all.sh` avoids that
 ambiguity by staging every build and replacing `out/` transactionally.
+Use `--platform linux/arm64` in the command above for an ARM64 artifact.
 
 wget is the one exception to a plain `docker build`. Its HTTPS test suite,
 which gates the build, resolves a fixed hostname that the musl-built client can
@@ -558,7 +562,8 @@ than content-addressed image digests.
 
 | Component | Version | SHA-256 |
 | --- | --- | --- |
-| Fil-C | 0.683 | `0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6` |
+| Fil-C (x86_64) | 0.683 | `0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6` |
+| Fil-C (aarch64) | 0.683 | `405bcd4ea69bed4542581cd917581b2a34ae8e363cc5c76b701f27585de60e66` |
 | 7-Zip source | 26.02 | `cf967c98bca02a4b8b16375f441825a8e141362f14be1969bbec8e1ca0bff9dd` |
 | unRAR source | 7.2.7 | `01d903a7dcf413cb2925696d7796e48e38d471f79bfe7ef3ad2aebf6c12dbefd` |
 | GNU tar source | 1.35 | `4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16` |
@@ -782,12 +787,12 @@ input, and inputs that no upstream test suite ships.
 
 `ci.yml` runs on pushes to `main`, on pull requests, and on `v*` tags, in four
 stages: build, then the test suite against those binaries, then the bundle,
-then a release for tags only. Each stage depends on the one before it, so a
-failing suite means no `fil-c-utils-<version>-x86_64.tar.gz` is published and
-no release is drafted. `build.yml` holds the compile matrix and exists only to
-be called from `ci.yml`; the utilities build independently, so running them in
-parallel makes CI take the time of the slowest one rather than the sum of them
-all.
+then a release for tags only. The build and test matrices use native GitHub
+runners for both x86_64 and aarch64. Each stage depends on the one before it,
+so a failing suite means no architecture bundle is published and no release is
+drafted. `build.yml` holds the compile matrix and exists only to be called from
+`ci.yml`; the utilities build independently, so running them in parallel makes
+CI take the time of the slowest one rather than the sum of them all.
 
 ### Cutting a release
 
@@ -799,10 +804,11 @@ git push origin v1.0.0
 ```
 
 That runs the whole pipeline against the tag and, if every stage passes, drafts
-a GitHub release holding `fil-c-utils-v1.0.0-x86_64.tar.gz` and its `.sha256`.
-The release is a **draft**, so it is reviewed before anyone can download it.
-Tagged builds take their version from the tag; every other build is named for
-the short commit hash.
+a GitHub release holding `fil-c-utils-v1.0.0-x86_64.tar.gz` and
+`fil-c-utils-v1.0.0-aarch64.tar.gz`, each with its `.sha256`. The release is a
+**draft**, so it is reviewed before anyone can download it. Tagged builds take
+their version from the tag; every other build is named for the short commit
+hash.
 
 The release job is the only one granted `contents: write`, and it hangs off the
 bundle, which hangs off the test suite. A tag cannot produce a release whose
@@ -875,9 +881,10 @@ the builder's loader or libraries are available.
 ### Compatibility details
 
 7-Zip's x86 feature detection normally uses inline CPUID and XGETBV assembly.
-Its patch substitutes Fil-C's supported intrinsic interfaces. The build also
-defines `Z7_NO_LARGE_PAGES`; 7-Zip's 2 MiB alignment request exceeds Fil-C's
-supported allocation alignment.
+Its patch substitutes Fil-C's supported intrinsic interfaces on x86 only; ARM64
+keeps 7-Zip's native architecture paths. The build also defines
+`Z7_NO_LARGE_PAGES`; 7-Zip's 2 MiB alignment request exceeds Fil-C's supported
+allocation alignment.
 
 A second 7-Zip patch removes the AVX-family SIMD paths. Fil-C implements the
 SSE and AES-NI intrinsics 7-Zip uses, but not the AVX ones: the VAES AES path,
@@ -892,9 +899,10 @@ compiler-version block in `AesOpt.c` and `Aes.c` and `MyAes.cpp`, and again in
 `Sha512Opt.c` and `Sha512.c`. SSE and AES-NI stay enabled.
 
 unRAR normally enables packed structures and misaligned integer access on
-x86-64. Fil-C requires pointer slots to retain their natural alignment, so the
-unRAR patch selects the existing alignment-safe code paths under Fil-C. Tests
-use the checksum-pinned `markokr/rarfile` fixture corpus at commit
+x86-64 and ARM64. Fil-C requires pointer slots to retain their natural
+alignment, so the unRAR patch selects the existing alignment-safe code paths
+under Fil-C. Tests use the checksum-pinned `markokr/rarfile` fixture corpus at
+commit
 `09fd4f216ef502e478f1aeb6f0e193b49056eee8`, covering more than 50 RAR 1.5,
 RAR 2, RAR 3, and RAR 5 archives, including solid, encrypted, multi-volume,
 Unicode, link, timestamp, and deliberately unusual cases.
@@ -1019,6 +1027,9 @@ docker build --no-cache \
 ./build-all.sh
 ./tests/run-tests.sh --iters 24
 ```
+
+Repeat architecture-sensitive changes with `--platform linux/arm64`, or rely
+on the pull-request workflow's native aarch64 build and full robustness suite.
 
 Run `./build-all.sh` before the suite, not after. `out/` is a build product,
 and an individual `docker build --output` merges into whatever is already
