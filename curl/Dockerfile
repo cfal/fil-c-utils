@@ -128,6 +128,9 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/curl.tar.xz \
     && tar --strip-components=1 -xJf /tmp/curl.tar.xz \
     && rm /tmp/curl.tar.xz
 
+COPY patches/0001-use-sched-yield-under-fil-c-on-aarch64.patch /tmp/curl-fil-c.patch
+RUN patch --batch --forward -p1 < /tmp/curl-fil-c.patch
+
 # The CA bundle is read from the platform rather than embedded. curl's
 # --with-ca-embed would compile a copy into the executable and then prefer it
 # over the system store instead of falling back to it, so a host's certificate

@@ -956,6 +956,11 @@ curl needs the same libtool treatment as XZ, for the same reason: a plain
 `make` time is what produces the static PIE. Overriding `LDFLAGS` there
 replaces what configure recorded, so `-L/deps/lib` has to be repeated.
 
+On ARM64, curl's global-init lock normally uses an inline `yield` instruction
+that Fil-C compiles into a run-time trap. The local patch excludes that
+optional assembly under Fil-C and selects curl's existing `sched_yield()`
+fallback. Curl's thread-safety test exercises the patched lock.
+
 The CA bundle is not embedded. curl's `--with-ca-embed` would compile a copy
 into the executable, but it prefers that copy over the system store rather than
 falling back to it, so a host's certificate updates would stop applying. A
