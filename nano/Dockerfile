@@ -45,6 +45,7 @@ RUN apt-get update \
         libc6-dev \
         linux-libc-dev \
         make \
+        patch \
         patchelf \
         pkg-config \
         xz-utils \
