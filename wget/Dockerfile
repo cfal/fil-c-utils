@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 
 ARG FILC_VERSION=0.683
-ARG FILC_SHA256=0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6
+ARG FILC_X86_64_SHA256=0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6
+ARG FILC_AARCH64_SHA256=405bcd4ea69bed4542581cd917581b2a34ae8e363cc5c76b701f27585de60e66
 ARG ZLIB_VERSION=1.3.2
 ARG ZLIB_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
 # Held on OpenSSL 3.x while curl and git use 4.x. wget 1.25.0, the current
@@ -30,8 +31,10 @@ ARG WGET_SHA256=766e48423e79359ea31e41db9e5c289675947a7fcf2efdcedb726ac9d0da3784
 
 FROM ubuntu:24.04 AS build
 
+ARG TARGETARCH
 ARG FILC_VERSION
-ARG FILC_SHA256
+ARG FILC_X86_64_SHA256
+ARG FILC_AARCH64_SHA256
 ARG ZLIB_VERSION
 ARG ZLIB_SHA256
 ARG OPENSSL_VERSION
@@ -83,9 +86,14 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/filc
-RUN curl -fsSL ${FETCH_RETRY} -o /tmp/filc.tar.xz \
-        "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/filc-${FILC_VERSION}-linux-x86_64.tar.xz" \
-    && echo "${FILC_SHA256}  /tmp/filc.tar.xz" | sha256sum -c - \
+RUN case "${TARGETARCH}" in \
+        amd64) filc_arch=x86_64; filc_sha256="${FILC_X86_64_SHA256}" ;; \
+        arm64) filc_arch=aarch64; filc_sha256="${FILC_AARCH64_SHA256}" ;; \
+        *) echo "unsupported target architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL ${FETCH_RETRY} -o /tmp/filc.tar.xz \
+        "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/filc-${FILC_VERSION}-linux-${filc_arch}.tar.xz" \
+    && echo "${filc_sha256}  /tmp/filc.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/filc.tar.xz \
     && ./setup.sh \
     && rm /tmp/filc.tar.xz
@@ -194,7 +202,7 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/openssl.tar.gz \
     && echo "${OPENSSL_SHA256}  /tmp/openssl.tar.gz" | sha256sum -c - \
     && tar --strip-components=1 -xzf /tmp/openssl.tar.gz \
     && rm /tmp/openssl.tar.gz
-RUN ./Configure linux-x86_64 \
+RUN ./Configure "linux-$(uname -m)" \
         no-shared \
         no-module \
         no-asm \

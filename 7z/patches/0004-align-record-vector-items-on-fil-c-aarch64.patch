@@ -1,0 +1,91 @@
+From: fil-c-utils maintainers
+Subject: [PATCH] Align 12-byte record-vector items under Fil-C on AArch64
+
+The AArch64 ABI copies these 12-byte POD values with an 8-byte access followed
+by a 4-byte access. Their natural 4-byte alignment and 12-byte array stride
+leave every other CRecordVector element only 4-byte aligned, so Fil-C rejects
+the widened assignment in CRecordVector::Add. Give the affected internal RAR,
+UDF, and SquashFS records 8-byte alignment under Fil-C on AArch64, which pads
+their array stride to 16 bytes without changing serialized formats.
+
+--- a/CPP/7zip/Archive/Rar/RarHandler.h
++++ b/CPP/7zip/Archive/Rar/RarHandler.h
+@@ -60,11 +60,18 @@ struct CArc
+   ISequentialInStream *CreateLimitedStream(UInt64 offset, UInt64 size) const;
+ };
+ 
++#if defined(__FILC__) && defined(__aarch64__)
++struct MY_ALIGN(8) CRefItem
++#else
+ struct CRefItem
++#endif
+ {
+   unsigned VolumeIndex;
+   unsigned ItemIndex;
+   unsigned NumItems;
+ };
++#if defined(__FILC__) && defined(__aarch64__)
++static_assert(sizeof(CRefItem) == 16 && __alignof__(CRefItem) == 8, "Fil-C RAR record alignment");
++#endif
+ 
+ class CHandler Z7_final:
+   public IInArchive,
+--- a/CPP/7zip/Archive/Udf/UdfHandler.h
++++ b/CPP/7zip/Archive/Udf/UdfHandler.h
+@@ -12,12 +12,19 @@
+ namespace NArchive {
+ namespace NUdf {
+ 
++#if defined(__FILC__) && defined(__aarch64__)
++struct MY_ALIGN(8) CRef2
++#else
+ struct CRef2
++#endif
+ {
+   unsigned Vol;
+   unsigned Fs;
+   unsigned Ref;
+ };
++#if defined(__FILC__) && defined(__aarch64__)
++static_assert(sizeof(CRef2) == 16 && __alignof__(CRef2) == 8, "Fil-C UDF record alignment");
++#endif
+ 
+ Z7_CLASS_IMP_CHandler_IInArchive_1(
+   IInArchiveGetStream
+--- a/CPP/7zip/Archive/SquashfsHandler.cpp
++++ b/CPP/7zip/Archive/SquashfsHandler.cpp
+@@ -809,1 +809,5 @@
++#if defined(__FILC__) && defined(__aarch64__)
++struct MY_ALIGN(8) CItem
++#else
+ struct CItem
++#endif
+@@ -817,1 +821,4 @@
+ };
++#if defined(__FILC__) && defined(__aarch64__)
++static_assert(sizeof(CItem) == 16 && __alignof__(CItem) == 8, "Fil-C SquashFS record alignment");
++#endif
+@@ -1393,16 +1393,23 @@ HRESULT CHandler::ReadData(CData &data, UInt64 start, UInt64 end)
+   _dynOutStream->CopyToBuffer(data.Data);
+   return S_OK;
+ }
+ 
++#if defined(__FILC__) && defined(__aarch64__)
++struct MY_ALIGN(8) CTempItem
++#else
+ struct CTempItem
++#endif
+ {
+   UInt32 StartBlock;
+   // UInt32 iNodeNumber1;
+   UInt32 Offset;
+   // UInt16 iNodeNumber2;
+   UInt16 Type;
+ };
++#if defined(__FILC__) && defined(__aarch64__)
++static_assert(sizeof(CTempItem) == 16 && __alignof__(CTempItem) == 8, "Fil-C SquashFS record alignment");
++#endif
+   
+ HRESULT CHandler::OpenDir(int parent, UInt32 startBlock, UInt32 offset, unsigned level, int &nodeIndex)
+ {
+   if (level > kNumDirLevelsMax)

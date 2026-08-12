@@ -16,7 +16,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         qemu-utils squashfs-tools genisoimage xorriso cpio rpm gcab \
         ntfs-3g dosfstools mtools gdisk fdisk ncompress udftools \
-        hfsprogs arj lhasa binutils dpkg-dev cabextract zip xz-utils \
+        hfsprogs arj lhasa binutils binutils-x86-64-linux-gnu dpkg-dev \
+        cabextract zip xz-utils \
         android-sdk-libsparse-utils \
         bzip2 gzip zstd file coreutils util-linux e2fsprogs \
     && rm -rf /var/lib/apt/lists/*

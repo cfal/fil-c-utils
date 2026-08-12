@@ -1,0 +1,35 @@
+From: fil-c-utils maintainers
+Subject: [PATCH] Align nested dictionary parameters under Fil-C on AArch64
+
+ZDICT_fastCover_params_t places its 12-byte zParams member at offset 44, and
+ZDICT_legacy_params_t places the same member at offset 4. The AArch64 ABI's
+8-byte chunk for that by-value member is therefore under-aligned for Fil-C.
+Align both unsafe members under Fil-C on AArch64. The regular COVER structure
+already places zParams at an 8-byte-aligned offset and needs no change.
+
+--- a/lib/zdict.h
++++ b/lib/zdict.h
+@@ -332,7 +332,11 @@ typedef struct {
+     unsigned shrinkDict;         /* Train dictionaries to shrink in size starting from the minimum size and selects the smallest dictionary that is shrinkDictMaxRegression% worse than the largest dictionary. 0 means no shrinking and 1 means shrinking  */
+     unsigned shrinkDictMaxRegression; /* Sets shrinkDictMaxRegression so that a smaller dictionary can be at worse shrinkDictMaxRegression% worse than the max dict size dictionary. */
+ 
++#if defined(__FILC__) && defined(__aarch64__)
++    ZDICT_params_t zParams __attribute__((aligned(8)));
++#else
+     ZDICT_params_t zParams;
++#endif
+ } ZDICT_fastCover_params_t;
+ 
+ /*! ZDICT_trainFromBuffer_cover():
+@@ -422,7 +426,11 @@ ZDICTLIB_STATIC_API size_t ZDICT_optimizeTrainFromBuffer_fastCover(void* dictBuf
+ 
+ typedef struct {
+     unsigned selectivityLevel;   /* 0 means default; larger => select more => larger dictionary */
++#if defined(__FILC__) && defined(__aarch64__)
++    ZDICT_params_t zParams __attribute__((aligned(8)));
++#else
+     ZDICT_params_t zParams;
++#endif
+ } ZDICT_legacy_params_t;
+ 
+ /*! ZDICT_trainFromBuffer_legacy():

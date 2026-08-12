@@ -1,14 +1,17 @@
 # syntax=docker/dockerfile:1
 
 ARG FILC_VERSION=0.683
-ARG FILC_SHA256=0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6
+ARG FILC_X86_64_SHA256=0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6
+ARG FILC_AARCH64_SHA256=405bcd4ea69bed4542581cd917581b2a34ae8e363cc5c76b701f27585de60e66
 ARG GZIP_VERSION=1.14
 ARG GZIP_SHA256=01a7b881bd220bfdf615f97b8718f80bdfd3f6add385b993dcf6efd14e8c0ac6
 
 FROM ubuntu:24.04 AS build
 
+ARG TARGETARCH
 ARG FILC_VERSION
-ARG FILC_SHA256
+ARG FILC_X86_64_SHA256
+ARG FILC_AARCH64_SHA256
 ARG GZIP_VERSION
 ARG GZIP_SHA256
 
@@ -37,19 +40,30 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/filc
-RUN curl -fsSL ${FETCH_RETRY} -o /tmp/filc.tar.xz \
-        "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/filc-${FILC_VERSION}-linux-x86_64.tar.xz" \
-    && echo "${FILC_SHA256}  /tmp/filc.tar.xz" | sha256sum -c - \
+RUN case "${TARGETARCH}" in \
+        amd64) filc_arch=x86_64; filc_sha256="${FILC_X86_64_SHA256}" ;; \
+        arm64) filc_arch=aarch64; filc_sha256="${FILC_AARCH64_SHA256}" ;; \
+        *) echo "unsupported target architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL ${FETCH_RETRY} -o /tmp/filc.tar.xz \
+        "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/filc-${FILC_VERSION}-linux-${filc_arch}.tar.xz" \
+    && echo "${filc_sha256}  /tmp/filc.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/filc.tar.xz \
     && ./setup.sh \
     && rm /tmp/filc.tar.xz
 
 WORKDIR /src
+# GNU's mirror redirector avoids recurring ARM-runner routing timeouts to the
+# primary FTP host. The pinned checksum remains the source-of-truth integrity
+# check regardless of which official mirror serves the archive.
 RUN curl -fsSL ${FETCH_RETRY} -o /tmp/gzip.tar.xz \
-        "https://ftp.gnu.org/gnu/gzip/gzip-${GZIP_VERSION}.tar.xz" \
+        "https://ftpmirror.gnu.org/gzip/gzip-${GZIP_VERSION}.tar.xz" \
     && echo "${GZIP_SHA256}  /tmp/gzip.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/gzip.tar.xz \
     && rm /tmp/gzip.tar.xz
+
+COPY patches/0001-disable-x87-control-word-assembly-under-fil-c.patch /tmp/gzip-fil-c.patch
+RUN patch --batch --forward -p1 < /tmp/gzip-fil-c.patch
 
 RUN FORCE_UNSAFE_CONFIGURE=1 \
     CC=/opt/filc/build/bin/clang \
@@ -70,6 +84,7 @@ RUN binary=/src/gzip \
     && grep -Eq "filc_call_user_main|zgc_alloc" /tmp/gzip.symbols \
     && strings -a "${binary}" > /tmp/gzip.strings \
     && ! grep -q "@llvm\." /tmp/gzip.strings \
+    && ! grep -Fq "cannot handle inline asm" /tmp/gzip.strings \
     && "${binary}" --version > /tmp/gzip.version \
     && grep -Fq "${GZIP_VERSION}" /tmp/gzip.version \
     && "${binary}" -c README > /tmp/smoke.gz \

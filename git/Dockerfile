@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 
 ARG FILC_VERSION=0.683
-ARG FILC_SHA256=0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6
+ARG FILC_X86_64_SHA256=0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6
+ARG FILC_AARCH64_SHA256=405bcd4ea69bed4542581cd917581b2a34ae8e363cc5c76b701f27585de60e66
 ARG ZLIB_VERSION=1.3.2
 ARG ZLIB_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
 ARG OPENSSL_VERSION=4.0.1
@@ -19,8 +20,10 @@ ARG GIT_SHA256=457fdb04dc8728e007d4688695e6912e6f680727920f2a40bf11eacc17505357
 
 FROM ubuntu:24.04 AS build
 
+ARG TARGETARCH
 ARG FILC_VERSION
-ARG FILC_SHA256
+ARG FILC_X86_64_SHA256
+ARG FILC_AARCH64_SHA256
 ARG ZLIB_VERSION
 ARG ZLIB_SHA256
 ARG OPENSSL_VERSION
@@ -66,9 +69,14 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/filc
-RUN curl -fsSL ${FETCH_RETRY} -o /tmp/filc.tar.xz \
-        "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/filc-${FILC_VERSION}-linux-x86_64.tar.xz" \
-    && echo "${FILC_SHA256}  /tmp/filc.tar.xz" | sha256sum -c - \
+RUN case "${TARGETARCH}" in \
+        amd64) filc_arch=x86_64; filc_sha256="${FILC_X86_64_SHA256}" ;; \
+        arm64) filc_arch=aarch64; filc_sha256="${FILC_AARCH64_SHA256}" ;; \
+        *) echo "unsupported target architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL ${FETCH_RETRY} -o /tmp/filc.tar.xz \
+        "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/filc-${FILC_VERSION}-linux-${filc_arch}.tar.xz" \
+    && echo "${filc_sha256}  /tmp/filc.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/filc.tar.xz \
     && ./setup.sh \
     && rm /tmp/filc.tar.xz
@@ -132,7 +140,7 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/openssl.tar.gz \
     && echo "${OPENSSL_SHA256}  /tmp/openssl.tar.gz" | sha256sum -c - \
     && tar --strip-components=1 -xzf /tmp/openssl.tar.gz \
     && rm /tmp/openssl.tar.gz
-RUN ./Configure linux-x86_64 \
+RUN ./Configure "linux-$(uname -m)" \
         no-shared no-module no-asm no-tests no-docs no-engine \
         --prefix=/deps --openssldir=/deps/ssl --libdir=lib \
         -DOPENSSL_NO_SECURE_MEMORY -O2 -g \
@@ -148,6 +156,8 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/curl.tar.xz \
     && echo "${CURL_SHA256}  /tmp/curl.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/curl.tar.xz \
     && rm /tmp/curl.tar.xz
+COPY patches/0002-use-sched-yield-under-fil-c-on-aarch64.patch /tmp/git-curl-fil-c.patch
+RUN patch --batch --forward -p1 < /tmp/git-curl-fil-c.patch
 RUN CFLAGS="-O2 -g" LDFLAGS="-L/deps/lib" ./configure \
         --disable-shared --enable-static --prefix=/deps \
         --with-openssl=/deps --with-zlib=/deps \
@@ -279,6 +289,7 @@ RUN for binary in git git-remote-http git-http-fetch git-daemon; do \
         grep -Eq "filc_call_user_main|zgc_alloc" "/tmp/${binary}.symbols"; \
         strings -a "${binary}" > "/tmp/${binary}.strings"; \
         ! grep -q "@llvm\." "/tmp/${binary}.strings"; \
+        ! grep -Fq "cannot handle inline asm" "/tmp/${binary}.strings"; \
     done \
     && ./git --version > /tmp/git.version \
     && grep -Fq "git version ${GIT_VERSION}" /tmp/git.version
@@ -475,7 +486,8 @@ RUN find /artifact/bin /artifact/libexec -type f -perm -u+x -print0 \
 
 # The shipped, stripped copy is exercised rather than the build tree, so this
 # covers the install layout and the strip in one step. A program that is built
-# and checked but never run can ship unable to do its job.
+# and checked but never run can ship unable to do its job. Capture command
+# output before grep: with pipefail, grep -q exiting early exposes git's SIGPIPE.
 RUN set -e; \
     export HOME=/tmp/githome; \
     mkdir -p "${HOME}"; \
@@ -489,9 +501,11 @@ RUN set -e; \
     /artifact/bin/git commit -q -m 'initial commit'; \
     /artifact/bin/git tag -a v1 -m 'a tag'; \
     test "$(/artifact/bin/git tag -n | wc -l)" -eq 1; \
-    /artifact/bin/git log --oneline | grep -Fq 'initial commit'; \
+    /artifact/bin/git log --oneline > /tmp/smoke.log; \
+    grep -Fq 'initial commit' /tmp/smoke.log; \
     printf 'second\n' >> file.txt; \
-    /artifact/bin/git diff --stat | grep -Fq file.txt; \
+    /artifact/bin/git diff --stat > /tmp/smoke.diff; \
+    grep -Fq file.txt /tmp/smoke.diff; \
     /artifact/bin/git grep -P 'he.lo' -- file.txt; \
     /artifact/bin/git clone -q . /tmp/smoke-clone; \
     test -f /tmp/smoke-clone/file.txt; \

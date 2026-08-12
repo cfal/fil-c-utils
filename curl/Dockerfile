@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 
 ARG FILC_VERSION=0.683
-ARG FILC_SHA256=0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6
+ARG FILC_X86_64_SHA256=0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6
+ARG FILC_AARCH64_SHA256=405bcd4ea69bed4542581cd917581b2a34ae8e363cc5c76b701f27585de60e66
 ARG ZLIB_VERSION=1.3.2
 ARG ZLIB_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
 ARG OPENSSL_VERSION=4.0.1
@@ -11,8 +12,10 @@ ARG CURL_SHA256=aa1b66a70eace83dc624508745646c08ae561de512ab403adffb93ac87fc72e6
 
 FROM ubuntu:24.04 AS build
 
+ARG TARGETARCH
 ARG FILC_VERSION
-ARG FILC_SHA256
+ARG FILC_X86_64_SHA256
+ARG FILC_AARCH64_SHA256
 ARG ZLIB_VERSION
 ARG ZLIB_SHA256
 ARG OPENSSL_VERSION
@@ -48,9 +51,14 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/filc
-RUN curl -fsSL ${FETCH_RETRY} -o /tmp/filc.tar.xz \
-        "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/filc-${FILC_VERSION}-linux-x86_64.tar.xz" \
-    && echo "${FILC_SHA256}  /tmp/filc.tar.xz" | sha256sum -c - \
+RUN case "${TARGETARCH}" in \
+        amd64) filc_arch=x86_64; filc_sha256="${FILC_X86_64_SHA256}" ;; \
+        arm64) filc_arch=aarch64; filc_sha256="${FILC_AARCH64_SHA256}" ;; \
+        *) echo "unsupported target architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL ${FETCH_RETRY} -o /tmp/filc.tar.xz \
+        "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/filc-${FILC_VERSION}-linux-${filc_arch}.tar.xz" \
+    && echo "${filc_sha256}  /tmp/filc.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/filc.tar.xz \
     && ./setup.sh \
     && rm /tmp/filc.tar.xz
@@ -90,13 +98,13 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/openssl.tar.gz \
 # no-shared and no-module keep the build free of the linker version scripts
 # that are the only change Fil-C's own OpenSSL port needed.
 #
-# --libdir=lib matters: OpenSSL defaults to lib64 on x86-64, while curl derives
-# -L<prefix>/lib from --with-openssl, and the mismatch fails the static link
-# with a bare "cannot find -lssl".
+# --libdir=lib matters: OpenSSL defaults to lib64 on these 64-bit targets,
+# while curl derives -L<prefix>/lib from --with-openssl, and the mismatch fails
+# the static link with a bare "cannot find -lssl".
 #
 # OPENSSL_NO_SECURE_MEMORY disables the mlock-backed secure heap, the one piece
 # Fil-C's port asserts is unused.
-RUN ./Configure linux-x86_64 \
+RUN ./Configure "linux-$(uname -m)" \
         no-shared \
         no-module \
         no-asm \
@@ -119,6 +127,9 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/curl.tar.xz \
     && echo "${CURL_SHA256}  /tmp/curl.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/curl.tar.xz \
     && rm /tmp/curl.tar.xz
+
+COPY patches/0001-use-sched-yield-under-fil-c-on-aarch64.patch /tmp/curl-fil-c.patch
+RUN patch --batch --forward -p1 < /tmp/curl-fil-c.patch
 
 # The CA bundle is read from the platform rather than embedded. curl's
 # --with-ca-embed would compile a copy into the executable and then prefer it
@@ -179,6 +190,12 @@ RUN set -e; \
     make -C tests LDFLAGS="-Wc,-static -L/deps/lib" > /tmp/curl-tests-build.log 2>&1; \
     cd tests; \
     if ! ./runtests.pl -n -a -j"$(nproc)" > /tmp/curl-tests.log 2>&1; then \
+        failed="$(sed -n 's/^TESTFAIL: These test cases failed: *//p' \
+            /tmp/curl-tests.log | tail -1)"; \
+        if [ -n "${failed}" ]; then \
+            echo "re-running failed tests serially for diagnostics: ${failed}"; \
+            ./runtests.pl -n -a ${failed} || true; \
+        fi; \
         tail -40 /tmp/curl-tests.log; \
         exit 1; \
     fi; \

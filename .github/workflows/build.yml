@@ -1,6 +1,7 @@
 name: build
 
-# Compiles every utility and uploads one tarball per utility.
+# Compiles every utility for both supported architectures and uploads one
+# tarball per utility and architecture.
 #
 # This workflow is only ever called by another one (ci.yml), or run by hand.
 # It stops at the per-utility trees deliberately: merging them into a publish-
@@ -15,9 +16,6 @@ on:
 
 permissions:
   contents: read
-
-env:
-  PLATFORM: linux/amd64
 
 jobs:
   # build-all.sh owns the list of utilities. Reading it here rather than
@@ -41,9 +39,11 @@ jobs:
           echo "building: ${utilities}"
 
   build:
-    name: build ${{ matrix.utility }}
-    runs-on: ubuntu-latest
+    name: build ${{ matrix.utility }} (${{ matrix.architecture }})
+    runs-on: ${{ matrix.architecture == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     needs: prepare
+    env:
+      PLATFORM: ${{ matrix.architecture == 'aarch64' && 'linux/arm64' || 'linux/amd64' }}
     # git is the outlier: its own suite is over a thousand test files and runs
     # at half the processors, which on a hosted runner takes hours rather than
     # the minutes every other utility needs. Raising the ceiling for all of them
@@ -54,6 +54,7 @@ jobs:
       fail-fast: false
       matrix:
         utility: ${{ fromJSON(needs.prepare.outputs.utilities) }}
+        architecture: [x86_64, aarch64]
     steps:
       - uses: actions/checkout@v5
 
@@ -83,7 +84,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: stage-${{ matrix.utility }}
+          name: stage-${{ matrix.architecture }}-${{ matrix.utility }}
           path: ${{ matrix.utility }}.tar
           retention-days: 1
           if-no-files-found: error

@@ -4,7 +4,7 @@
  
  #include "CpuArch.h"
  
-+#ifdef __FILC__
++#if defined(__FILC__) && defined(MY_CPU_X86_OR_AMD64)
 +#include <cpuid.h>
 +#include <stdfil.h>
 +#endif

@@ -36,8 +36,8 @@ size limits, path validation, or timely dependency updates.
 Requirements:
 
 - Docker with BuildKit support
-- An x86-64 Linux host, or an environment capable of building
-  `--platform linux/amd64` images
+- An x86-64 or ARM64 Linux host, or an environment capable of building
+  `--platform linux/amd64` or `--platform linux/arm64` images
 - Network access to the pinned upstream release files and Ubuntu package
   repositories
 
@@ -107,8 +107,9 @@ out/
     └── zstd/
 ```
 
-The executables are x86-64 static PIEs and have no ELF program interpreter.
-They can run directly from `out/`:
+The executables are native x86-64 or ARM64 static PIEs, according to the
+selected build platform, and have no ELF program interpreter. They can run
+directly from `out/`:
 
 ```sh
 ./out/bin/7z t archive.7z
@@ -158,11 +159,13 @@ are built in. What it does need from the host is a shell: panes run
 `$SHELL`, or `/bin/sh` if that is unset, so the scratch image below can report
 its version but cannot open a pane.
 
-Set `PLATFORM` to override the Docker platform. The pinned Fil-C release is
-currently provided only for `linux/amd64`:
+`linux/amd64` remains the default. Set `PLATFORM` to build the native ARM64
+artifacts instead; Fil-C publishes checksum-pinned Pizfix/musl distributions
+for both platforms:
 
 ```sh
 PLATFORM=linux/amd64 ./build-all.sh
+PLATFORM=linux/arm64 ./build-all.sh
 ```
 
 ## Using compressed tar archives
@@ -206,6 +209,7 @@ Replace `gzip` with `7z`, `unrar`, `tar`, `bzip2`, `xz`, `zstd`, `curl`, `wget`,
 `nano`, `tmux`, or `git`. Docker merges an individual artifact tree into an
 existing destination, so old files may remain. `build-all.sh` avoids that
 ambiguity by staging every build and replacing `out/` transactionally.
+Use `--platform linux/arm64` in the command above for an ARM64 artifact.
 
 wget is the one exception to a plain `docker build`. Its HTTPS test suite,
 which gates the build, resolves a fixed hostname that the musl-built client can
@@ -392,10 +396,10 @@ and the run says so; every other stage works from Python 3 alone.
 
 ### The alignment stage
 
-Two defects share an awkward shape: they compile cleanly, link cleanly, pass
-every functional test, and then abort at run time on a machine or an input that
-happens to reach them. This stage finds both by reading the binary, so neither
-needs the trigger to be reproduced.
+Three defects share an awkward shape: they compile cleanly, link cleanly, pass
+ordinary functional tests, and then abort at run time on a machine or an input
+that happens to reach them. This stage finds all three by reading the binary,
+so none needs the trigger to be reproduced.
 
 **Misaligned pointer fields.** Fil-C stores a capability beside every pointer
 slot and requires those slots to keep their natural alignment. A
@@ -410,9 +414,15 @@ only reached on a CPU that has the relevant feature, so a build can be clean on
 the developer's machine and abort on someone else's. The stage greps each
 binary for those embedded strings, which is visible without that CPU.
 
-Both checks are also asserted in every utility's Dockerfile, so a build that
-introduces either fails immediately rather than shipping. This is the cheapest
-stage and the one most worth running after any dependency upgrade.
+**Unsupported inline assembly.** On targets where Fil-C cannot lower an inline
+assembly block, it embeds a similar run-time trap. Optional architecture paths
+can hide it until a particular input selects them, so the stage also rejects
+Fil-C's inline-assembly trap marker.
+
+The compiler-trap checks are also asserted by the affected utility Dockerfiles,
+and compatibility patches have focused functional assertions. The shared stage
+is the backstop over every shipped executable and remains the cheapest one to
+run after a dependency upgrade.
 
 ### The roundtrip stage
 
@@ -558,7 +568,8 @@ than content-addressed image digests.
 
 | Component | Version | SHA-256 |
 | --- | --- | --- |
-| Fil-C | 0.683 | `0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6` |
+| Fil-C (x86_64) | 0.683 | `0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6` |
+| Fil-C (aarch64) | 0.683 | `405bcd4ea69bed4542581cd917581b2a34ae8e363cc5c76b701f27585de60e66` |
 | 7-Zip source | 26.02 | `cf967c98bca02a4b8b16375f441825a8e141362f14be1969bbec8e1ca0bff9dd` |
 | unRAR source | 7.2.7 | `01d903a7dcf413cb2925696d7796e48e38d471f79bfe7ef3ad2aebf6c12dbefd` |
 | GNU tar source | 1.35 | `4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16` |
@@ -645,7 +656,8 @@ RAR compression algorithm. Review `out/licenses/` before redistribution.
   built without the backend and reports `fsmonitor--daemon is not supported on
   this platform`. `core.fsmonitor` still works in its hook form, where the
   monitor is a program you name rather than one git runs itself. git shares
-  curl's no-assembly OpenSSL and the throughput and side-channel caveats above.
+  curl's no-assembly OpenSSL, ARM lock fallback, and the throughput and
+  side-channel caveats above.
   The Perl and Python subcommands are not exported: they are scripts, not
   executables, and this repository ships only the latter.
 - One thing to know about git under load: when many copies of it run at once,
@@ -782,12 +794,12 @@ input, and inputs that no upstream test suite ships.
 
 `ci.yml` runs on pushes to `main`, on pull requests, and on `v*` tags, in four
 stages: build, then the test suite against those binaries, then the bundle,
-then a release for tags only. Each stage depends on the one before it, so a
-failing suite means no `fil-c-utils-<version>-x86_64.tar.gz` is published and
-no release is drafted. `build.yml` holds the compile matrix and exists only to
-be called from `ci.yml`; the utilities build independently, so running them in
-parallel makes CI take the time of the slowest one rather than the sum of them
-all.
+then a release for tags only. The build and test matrices use native GitHub
+runners for both x86_64 and aarch64. Each stage depends on the one before it,
+so a failing suite means no architecture bundle is published and no release is
+drafted. `build.yml` holds the compile matrix and exists only to be called from
+`ci.yml`; the utilities build independently, so running them in parallel makes
+CI take the time of the slowest one rather than the sum of them all.
 
 ### Cutting a release
 
@@ -799,10 +811,11 @@ git push origin v1.0.0
 ```
 
 That runs the whole pipeline against the tag and, if every stage passes, drafts
-a GitHub release holding `fil-c-utils-v1.0.0-x86_64.tar.gz` and its `.sha256`.
-The release is a **draft**, so it is reviewed before anyone can download it.
-Tagged builds take their version from the tag; every other build is named for
-the short commit hash.
+a GitHub release holding `fil-c-utils-v1.0.0-x86_64.tar.gz` and
+`fil-c-utils-v1.0.0-aarch64.tar.gz`, each with its `.sha256`. The release is a
+**draft**, so it is reviewed before anyone can download it. Tagged builds take
+their version from the tag; every other build is named for the short commit
+hash.
 
 The release job is the only one granted `contents: write`, and it hangs off the
 bundle, which hangs off the test suite. A tag cannot produce a release whose
@@ -875,9 +888,13 @@ the builder's loader or libraries are available.
 ### Compatibility details
 
 7-Zip's x86 feature detection normally uses inline CPUID and XGETBV assembly.
-Its patch substitutes Fil-C's supported intrinsic interfaces. The build also
-defines `Z7_NO_LARGE_PAGES`; 7-Zip's 2 MiB alignment request exceeds Fil-C's
-supported allocation alignment.
+Its patch substitutes Fil-C's supported intrinsic interfaces on x86 only; ARM64
+keeps 7-Zip's native architecture paths. One of those paths uses the inline ARM
+`rbit` instruction in the Deflate decoder, which Fil-C 0.683 cannot lower. An
+ARM-only patch selects 7-Zip's existing bit-reversal table instead, and the
+Dockerfile gates both Deflate-in-7z and ZIP decoding. The build also defines
+`Z7_NO_LARGE_PAGES`; 7-Zip's 2 MiB alignment request exceeds Fil-C's supported
+allocation alignment.
 
 A second 7-Zip patch removes the AVX-family SIMD paths. Fil-C implements the
 SSE and AES-NI intrinsics 7-Zip uses, but not the AVX ones: the VAES AES path,
@@ -891,10 +908,18 @@ the definition and the dispatch for each path, since 7-Zip repeats the same
 compiler-version block in `AesOpt.c` and `Aes.c` and `MyAes.cpp`, and again in
 `Sha512Opt.c` and `Sha512.c`. SSE and AES-NI stay enabled.
 
+Three 7-Zip handlers keep 12-byte POD records in `CRecordVector`. The AArch64
+ABI copies those values with an 8-byte access followed by a 4-byte access, while
+their normal 12-byte stride leaves every other element only 4-byte aligned.
+Fil-C correctly rejects that widened access. An ARM-only patch aligns the RAR,
+UDF, and SquashFS records to 8 bytes, making their internal stride 16 bytes. The
+change costs 4 bytes per live record and does not affect any on-disk layout.
+
 unRAR normally enables packed structures and misaligned integer access on
-x86-64. Fil-C requires pointer slots to retain their natural alignment, so the
-unRAR patch selects the existing alignment-safe code paths under Fil-C. Tests
-use the checksum-pinned `markokr/rarfile` fixture corpus at commit
+x86-64 and ARM64. Fil-C requires pointer slots to retain their natural
+alignment, so the unRAR patch selects the existing alignment-safe code paths
+under Fil-C. Tests use the checksum-pinned `markokr/rarfile` fixture corpus at
+commit
 `09fd4f216ef502e478f1aeb6f0e193b49056eee8`, covering more than 50 RAR 1.5,
 RAR 2, RAR 3, and RAR 5 archives, including solid, encrypted, multi-volume,
 Unicode, link, timestamp, and deliberately unusual cases.
@@ -919,6 +944,14 @@ incremental archives, and other obstack consumers.
 gzip defines `GNU_STANDARD=0` so its documented `gunzip` and `zcat` invocation
 names select decompression mode. The Dockerfile tests both aliases rather than
 assuming that creating the links is sufficient.
+
+gzip and nano both vendor gnulib's x87 control-word helper. On x86-64 its
+long-double formatting path normally saves and restores the precision control
+with inline `fnstcw` and `fldcw`, whose memory operands Fil-C turns into run-time
+traps. Fil-C's musl fenv implementation cannot change x87 precision, so the
+default extended precision remains in effect. Scoped patches omit the redundant
+save and restore under Fil-C. Both Dockerfiles reject the compiler's trap marker
+if any unsupported inline assembly remains.
 
 XZ uses `LDFLAGS=-Wc,-static` during `make`. Libtool consumes plain `-static`
 as a request to prefer static project libraries and otherwise emits a
@@ -948,6 +981,12 @@ curl needs the same libtool treatment as XZ, for the same reason: a plain
 `make` time is what produces the static PIE. Overriding `LDFLAGS` there
 replaces what configure recorded, so `-L/deps/lib` has to be repeated.
 
+On ARM64, curl's global-init lock normally uses an inline `yield` instruction
+that Fil-C compiles into a run-time trap. The local patch excludes that
+optional assembly under Fil-C and selects curl's existing `sched_yield()`
+fallback. Curl's thread-safety test exercises the patched lock. Git statically
+links its own libcurl and applies the same patch.
+
 The CA bundle is not embedded. curl's `--with-ca-embed` would compile a copy
 into the executable, but it prefers that copy over the system store rather than
 falling back to it, so a host's certificate updates would stop applying. A
@@ -960,6 +999,36 @@ Zstandard is built with `ZSTD_NO_ASM=1`. Version 1.5.7 has one pointer-returning
 assembly block and several optional alignment blocks that do not honor
 `ZSTD_DISABLE_ASM`, so the local patch extends those guards and selects the
 existing portable C implementation.
+
+On ARM64, `ZSTD_NO_INTRINSICS` also selects Zstandard's portable SWAR row
+matcher. Its NEON matcher uses structured `ld2` and `ld4` loads that Fil-C
+0.683 compiles into unhandled-intrinsic traps. The flag is architecture-scoped,
+so x86 keeps its supported SIMD matcher.
+
+Zstandard's optimal parser also stores 12-byte repcode arrays in 28-byte table
+entries. Clang widens their copies to an 8-byte access on ARM64, leaving every
+other entry under-aligned for Fil-C. The ARM-specific patch aligns that member
+to 8 bytes and pads each entry to 32 bytes; the compression algorithm is
+unchanged, at a cost of about 16 KiB per optimal-parser table.
+
+The same 8-byte chunking applies when Zstandard passes its 12-byte frame
+parameters by value. `ZSTD_parameters` normally places that member at offset
+28, so the ARM patch aligns it and grows the parameter structure from 40 to 48
+bytes under Fil-C. Dictionary training exercises this path in the upstream
+suite.
+
+FastCover and the legacy dictionary builder likewise nest a 12-byte parameter
+block at offsets 44 and 4. Those members are aligned under Fil-C on ARM64,
+growing the structures from 56 to 64 bytes and 16 to 24 bytes respectively.
+The regular COVER layout already has the required alignment.
+
+The legacy dictionary builder also keeps 12-byte items in a table and passes
+them by value. Its ARM patch gives those items 8-byte alignment, changing the
+table stride from 12 to 16 bytes so the ABI's widened copies remain aligned.
+
+Long-distance matching uses another internal table of 12-byte raw sequences.
+Those entries receive the same ARM-only alignment and 16-byte stride because
+the matcher reads them by value.
 
 nano is the second utility with dependencies, and like curl it builds them with
 the same compiler into a shared `/deps` prefix: ncurses for the terminal and
@@ -1019,6 +1088,9 @@ docker build --no-cache \
 ./build-all.sh
 ./tests/run-tests.sh --iters 24
 ```
+
+Repeat architecture-sensitive changes with `--platform linux/arm64`, or rely
+on the pull-request workflow's native aarch64 build and full robustness suite.
 
 Run `./build-all.sh` before the suite, not after. `out/` is a build product,
 and an individual `docker build --output` merges into whatever is already

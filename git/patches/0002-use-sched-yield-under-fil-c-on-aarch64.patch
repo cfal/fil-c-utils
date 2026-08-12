@@ -1,0 +1,18 @@
+From: fil-c-utils maintainers
+Subject: [PATCH] Use sched_yield under Fil-C on AArch64
+
+Fil-C traps when curl's global-init lock executes the inline AArch64 yield
+instruction. Skip that optional assembly under Fil-C so the existing
+HAVE_SCHED_YIELD fallback handles the spin wait instead.
+
+--- a/lib/easy_lock.h
++++ b/lib/easy_lock.h
+@@ -68,7 +68,7 @@ static CURL_INLINE void curl_simple_lock_lock(curl_simple_lock *lock)
+       /* Reduce load (not mandatory) */
+ #ifdef HAVE_BUILTIN_IA32_PAUSE
+       __builtin_ia32_pause();
+-#elif defined(__aarch64__)
++#elif defined(__aarch64__) && !defined(__FILC__)
+       __asm__ volatile("yield" ::: "memory");
+ #elif defined(HAVE_SCHED_YIELD)
+       sched_yield();

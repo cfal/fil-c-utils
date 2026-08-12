@@ -1,15 +1,18 @@
 # syntax=docker/dockerfile:1
 
 ARG FILC_VERSION=0.683
-ARG FILC_SHA256=0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6
+ARG FILC_X86_64_SHA256=0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6
+ARG FILC_AARCH64_SHA256=405bcd4ea69bed4542581cd917581b2a34ae8e363cc5c76b701f27585de60e66
 ARG SEVENZIP_VERSION=26.02
 ARG SEVENZIP_ARCHIVE_VERSION=2602
 ARG SEVENZIP_SHA256=cf967c98bca02a4b8b16375f441825a8e141362f14be1969bbec8e1ca0bff9dd
 
 FROM ubuntu:24.04 AS build
 
+ARG TARGETARCH
 ARG FILC_VERSION
-ARG FILC_SHA256
+ARG FILC_X86_64_SHA256
+ARG FILC_AARCH64_SHA256
 ARG SEVENZIP_VERSION
 ARG SEVENZIP_ARCHIVE_VERSION
 ARG SEVENZIP_SHA256
@@ -39,9 +42,14 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/filc
-RUN curl -fsSL ${FETCH_RETRY} -o /tmp/filc.tar.xz \
-        "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/filc-${FILC_VERSION}-linux-x86_64.tar.xz" \
-    && echo "${FILC_SHA256}  /tmp/filc.tar.xz" | sha256sum -c - \
+RUN case "${TARGETARCH}" in \
+        amd64) filc_arch=x86_64; filc_sha256="${FILC_X86_64_SHA256}" ;; \
+        arm64) filc_arch=aarch64; filc_sha256="${FILC_AARCH64_SHA256}" ;; \
+        *) echo "unsupported target architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL ${FETCH_RETRY} -o /tmp/filc.tar.xz \
+        "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/filc-${FILC_VERSION}-linux-${filc_arch}.tar.xz" \
+    && echo "${filc_sha256}  /tmp/filc.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/filc.tar.xz \
     && ./setup.sh \
     && rm /tmp/filc.tar.xz
@@ -64,6 +72,19 @@ RUN for source in C/AesOpt.c C/Aes.c C/Blake2s.c C/LzFind.c C/SwapBytes.c \
         chmod u+w "${source}" && sed -i 's/\r$//' "${source}"; \
     done \
     && patch --batch --forward -p1 < /tmp/7zip-no-avx.patch
+
+COPY patches/0003-use-portable-bit-reversal-on-fil-c-aarch64.patch /tmp/7zip-fil-c-arm.patch
+RUN chmod u+w CPP/7zip/Compress/BitlDecoder.h \
+    && sed -i 's/\r$//' CPP/7zip/Compress/BitlDecoder.h \
+    && patch --batch --forward -p1 < /tmp/7zip-fil-c-arm.patch
+
+COPY patches/0004-align-record-vector-items-on-fil-c-aarch64.patch /tmp/7zip-fil-c-arm-records.patch
+RUN for source in CPP/7zip/Archive/Rar/RarHandler.h \
+                  CPP/7zip/Archive/Udf/UdfHandler.h \
+                  CPP/7zip/Archive/SquashfsHandler.cpp; do \
+        chmod u+w "${source}" && sed -i 's/\r$//' "${source}"; \
+    done \
+    && patch --batch --forward -p1 < /tmp/7zip-fil-c-arm-records.patch
 
 WORKDIR /src/CPP/7zip/Bundles/Alone2
 RUN make -f makefile.gcc -j"$(nproc)" \
@@ -94,13 +115,18 @@ RUN binary=/src/CPP/7zip/Bundles/Alone2/_o/7zz \
     && grep -Eq "filc_call_user_main|zgc_alloc" /tmp/7z.symbols \
     && strings -a "${binary}" > /tmp/7z.strings \
     && ! grep -q "@llvm\." /tmp/7z.strings \
+    && ! grep -Fq "cannot handle inline asm" /tmp/7z.strings \
     && "${binary}" i >/dev/null \
     && mkdir -p /tmp/smoke/input /tmp/smoke/output \
     && cp DOC/readme.txt /tmp/smoke/input/readme.txt \
     && "${binary}" a /tmp/smoke/archive.7z /tmp/smoke/input/readme.txt \
     && "${binary}" t /tmp/smoke/archive.7z \
     && "${binary}" x -o/tmp/smoke/output /tmp/smoke/archive.7z \
-    && cmp /tmp/smoke/input/readme.txt /tmp/smoke/output/readme.txt
+    && cmp /tmp/smoke/input/readme.txt /tmp/smoke/output/readme.txt \
+    && "${binary}" a -t7z -m0=Deflate /tmp/smoke/deflate.7z /tmp/smoke/input/readme.txt \
+    && "${binary}" t /tmp/smoke/deflate.7z \
+    && "${binary}" a -tzip /tmp/smoke/archive.zip /tmp/smoke/input/readme.txt \
+    && "${binary}" t /tmp/smoke/archive.zip
 
 RUN install -Dm755 CPP/7zip/Bundles/Alone2/_o/7zz /artifact/bin/7z \
     && ln -s 7z /artifact/bin/7zz \

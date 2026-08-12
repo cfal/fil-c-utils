@@ -1,0 +1,23 @@
+From: fil-c-utils maintainers
+Subject: [PATCH] Align raw sequences under Fil-C on AArch64
+
+Long-distance matching stores 12-byte rawSeq values in an array and reads them
+by value. The AArch64 ABI uses an 8-byte chunk for those copies, but the array's
+12-byte stride leaves every other element only 4-byte aligned. Align rawSeq to
+8 bytes under Fil-C on AArch64, padding each internal entry to 16 bytes without
+changing its values or behavior.
+
+--- a/lib/compress/zstd_compress_internal.h
++++ b/lib/compress/zstd_compress_internal.h
+@@ -200,7 +200,11 @@ typedef struct {
+     U32 offset;         /* Offset of sequence */
+     U32 litLength;      /* Length of literals prior to match */
+     U32 matchLength;    /* Raw length of match */
++#if defined(__FILC__) && defined(__aarch64__)
++} ZSTD_ALIGNED(8) rawSeq;
++#else
+ } rawSeq;
++#endif
+ 
+ typedef struct {
+   rawSeq* seq;          /* The start of the sequences */

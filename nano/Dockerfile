@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 
 ARG FILC_VERSION=0.683
-ARG FILC_SHA256=0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6
+ARG FILC_X86_64_SHA256=0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6
+ARG FILC_AARCH64_SHA256=405bcd4ea69bed4542581cd917581b2a34ae8e363cc5c76b701f27585de60e66
 ARG NCURSES_VERSION=6.6
 ARG NCURSES_SHA256=355b4cbbed880b0381a04c46617b7656e362585d52e9cf84a67e2009b749ff11
 ARG FILE_VERSION=5.46
@@ -11,8 +12,10 @@ ARG NANO_SHA256=5f47764274cb7532349ce0aa20ec10f1e8e851a6e9fa3eb66812c43d196db042
 
 FROM ubuntu:24.04 AS build
 
+ARG TARGETARCH
 ARG FILC_VERSION
-ARG FILC_SHA256
+ARG FILC_X86_64_SHA256
+ARG FILC_AARCH64_SHA256
 ARG NCURSES_VERSION
 ARG NCURSES_SHA256
 ARG FILE_VERSION
@@ -42,15 +45,21 @@ RUN apt-get update \
         libc6-dev \
         linux-libc-dev \
         make \
+        patch \
         patchelf \
         pkg-config \
         xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/filc
-RUN curl -fsSL ${FETCH_RETRY} -o /tmp/filc.tar.xz \
-        "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/filc-${FILC_VERSION}-linux-x86_64.tar.xz" \
-    && echo "${FILC_SHA256}  /tmp/filc.tar.xz" | sha256sum -c - \
+RUN case "${TARGETARCH}" in \
+        amd64) filc_arch=x86_64; filc_sha256="${FILC_X86_64_SHA256}" ;; \
+        arm64) filc_arch=aarch64; filc_sha256="${FILC_AARCH64_SHA256}" ;; \
+        *) echo "unsupported target architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL ${FETCH_RETRY} -o /tmp/filc.tar.xz \
+        "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/filc-${FILC_VERSION}-linux-${filc_arch}.tar.xz" \
+    && echo "${filc_sha256}  /tmp/filc.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/filc.tar.xz \
     && ./setup.sh \
     && rm /tmp/filc.tar.xz
@@ -134,6 +143,9 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/nano.tar.xz \
     && tar --strip-components=1 -xJf /tmp/nano.tar.xz \
     && rm /tmp/nano.tar.xz
 
+COPY patches/0001-disable-x87-control-word-assembly-under-fil-c.patch /tmp/nano-fil-c.patch
+RUN patch --batch --forward -p1 < /tmp/nano-fil-c.patch
+
 # All of nano's features are on by default; only --enable-tiny and the
 # individual --disable-* flags take any away, and none are given here. The
 # explicit --enable-utf8 and the presence of libmagic are the two that depend
@@ -170,6 +182,7 @@ RUN binary=/src/src/nano; failed=0; \
     grep -Eq "filc_call_user_main|zgc_alloc" /tmp/nano.symbols || { echo "FAIL: no Fil-C runtime symbol"; failed=1; }; \
     strings -a "${binary}" > /tmp/nano.strings; \
     grep -q "@llvm\." /tmp/nano.strings && { echo "FAIL: unhandled intrinsic:"; grep -o "@llvm\.[a-z0-9._]*" /tmp/nano.strings | sort -u; failed=1; }; \
+    grep -Fq "cannot handle inline asm" /tmp/nano.strings && { echo "FAIL: unsupported inline assembly"; failed=1; }; \
     "${binary}" --version > /tmp/nano.version 2>&1; \
     grep -Fq "version ${NANO_VERSION}" /tmp/nano.version || { echo "FAIL: version string; got: $(cat /tmp/nano.version)"; failed=1; }; \
     test "${failed}" -eq 0 && echo "nano provenance checks passed"; \

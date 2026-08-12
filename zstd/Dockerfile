@@ -1,14 +1,17 @@
 # syntax=docker/dockerfile:1
 
 ARG FILC_VERSION=0.683
-ARG FILC_SHA256=0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6
+ARG FILC_X86_64_SHA256=0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6
+ARG FILC_AARCH64_SHA256=405bcd4ea69bed4542581cd917581b2a34ae8e363cc5c76b701f27585de60e66
 ARG ZSTD_VERSION=1.5.7
 ARG ZSTD_SHA256=eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3
 
 FROM ubuntu:24.04 AS build
 
+ARG TARGETARCH
 ARG FILC_VERSION
-ARG FILC_SHA256
+ARG FILC_X86_64_SHA256
+ARG FILC_AARCH64_SHA256
 ARG ZSTD_VERSION
 ARG ZSTD_SHA256
 
@@ -37,9 +40,14 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/filc
-RUN curl -fsSL ${FETCH_RETRY} -o /tmp/filc.tar.xz \
-        "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/filc-${FILC_VERSION}-linux-x86_64.tar.xz" \
-    && echo "${FILC_SHA256}  /tmp/filc.tar.xz" | sha256sum -c - \
+RUN case "${TARGETARCH}" in \
+        amd64) filc_arch=x86_64; filc_sha256="${FILC_X86_64_SHA256}" ;; \
+        arm64) filc_arch=aarch64; filc_sha256="${FILC_AARCH64_SHA256}" ;; \
+        *) echo "unsupported target architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL ${FETCH_RETRY} -o /tmp/filc.tar.xz \
+        "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/filc-${FILC_VERSION}-linux-${filc_arch}.tar.xz" \
+    && echo "${filc_sha256}  /tmp/filc.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/filc.tar.xz \
     && ./setup.sh \
     && rm /tmp/filc.tar.xz
@@ -54,10 +62,32 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/zstd.tar.gz \
 COPY patches/0001-honor-ZSTD_DISABLE_ASM-in-ZSTD_selectAddr.patch /tmp/zstd-fil-c.patch
 RUN patch --batch --forward -p1 < /tmp/zstd-fil-c.patch
 
-RUN make -j"$(nproc)" zstd \
+COPY patches/0002-align-optimal-repcodes-on-fil-c-aarch64.patch /tmp/zstd-fil-c-arm.patch
+RUN patch --batch --forward -p1 < /tmp/zstd-fil-c-arm.patch
+
+COPY patches/0003-align-frame-parameters-on-fil-c-aarch64.patch /tmp/zstd-fil-c-arm-params.patch
+RUN patch --batch --forward -p1 < /tmp/zstd-fil-c-arm-params.patch
+
+COPY patches/0004-align-nested-dictionary-parameters-on-fil-c-aarch64.patch /tmp/zstd-fil-c-arm-dict.patch
+RUN patch --batch --forward -p1 < /tmp/zstd-fil-c-arm-dict.patch
+
+COPY patches/0005-align-legacy-dictionary-items-on-fil-c-aarch64.patch /tmp/zstd-fil-c-arm-items.patch
+RUN patch --batch --forward -p1 < /tmp/zstd-fil-c-arm-items.patch
+
+COPY patches/0006-align-raw-sequences-on-fil-c-aarch64.patch /tmp/zstd-fil-c-arm-sequences.patch
+RUN patch --batch --forward -p1 < /tmp/zstd-fil-c-arm-sequences.patch
+
+# Fil-C does not lower the structured NEON loads in Zstd's ARM row matcher and
+# leaves them as run-time traps. The upstream flag selects its SWAR matcher on
+# ARM only; x86 keeps the supported SIMD paths it already used.
+RUN cflags="-O2 -g" \
+    && if [ "${TARGETARCH}" = arm64 ]; then \
+        cflags="${cflags} -DZSTD_NO_INTRINSICS"; \
+    fi \
+    && make -j"$(nproc)" zstd \
         CC=/opt/filc/build/bin/clang \
         CXX=/opt/filc/build/bin/clang++ \
-        CFLAGS="-O2 -g" \
+        CFLAGS="${cflags}" \
         LDFLAGS="-static" \
         HAVE_ZLIB=0 \
         HAVE_LZMA=0 \
@@ -75,7 +105,11 @@ RUN binary=/src/programs/zstd \
     && grep -Fq "pizlonated" /tmp/zstd.symbols \
     && grep -Eq "filc_call_user_main|zgc_alloc" /tmp/zstd.symbols \
     && strings -a "${binary}" > /tmp/zstd.strings \
-    && ! grep -q "@llvm\." /tmp/zstd.strings \
+    && if grep -q "@llvm\." /tmp/zstd.strings; then \
+        echo "unhandled LLVM intrinsics in ${binary}:"; \
+        grep -oE '@llvm\.[A-Za-z0-9._]+' /tmp/zstd.strings; \
+        exit 1; \
+    fi \
     && "${binary}" --version > /tmp/zstd.version \
     && grep -Fq "${ZSTD_VERSION}" /tmp/zstd.version \
     && "${binary}" -q -T2 -c README.md > /tmp/smoke.zst \
@@ -86,10 +120,14 @@ RUN binary=/src/programs/zstd \
 # far more of the program than a round-trip smoke test can, and every case runs
 # against the Fil-C binary.
 RUN set -e; \
+    cflags="-O2 -g"; \
+    if [ "${TARGETARCH}" = arm64 ]; then \
+        cflags="${cflags} -DZSTD_NO_INTRINSICS"; \
+    fi; \
     make check \
         CC=/opt/filc/build/bin/clang \
         CXX=/opt/filc/build/bin/clang++ \
-        CFLAGS="-O2 -g" \
+        CFLAGS="${cflags}" \
         LDFLAGS="-static" \
         HAVE_ZLIB=0 HAVE_LZMA=0 HAVE_LZ4=0 ZSTD_NO_ASM=1 \
         > /tmp/zstd-check.log 2>&1 || { tail -40 /tmp/zstd-check.log; exit 1; }; \

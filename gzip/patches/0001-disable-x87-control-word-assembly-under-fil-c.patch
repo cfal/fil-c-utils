@@ -1,0 +1,21 @@
+From: fil-c-utils maintainers
+Subject: [PATCH] Disable x87 control-word assembly under Fil-C
+
+Fil-C rejects the memory operands used by fnstcw and fldcw, leaving run-time
+traps in gnulib's long-double printf paths. Fil-C's musl fenv implementation
+does not expose a way to change the x87 precision control, so its default
+extended precision remains in effect and the control-word save/restore is
+unnecessary.
+
+--- a/lib/fpucw.h
++++ b/lib/fpucw.h
+@@ -65,7 +65,8 @@ extern "C" {
+ 
+ 
+ /* Inline assembler like this works only with GNU C and clang.  */
+-#if (defined __i386__ || defined __x86_64__) && (defined __GNUC__ || defined __clang__)
++#if !defined __FILC__ \
++    && (defined __i386__ || defined __x86_64__) && (defined __GNUC__ || defined __clang__)
+ 
+ typedef unsigned short fpucw_t; /* glibc calls this fpu_control_t */
+ 

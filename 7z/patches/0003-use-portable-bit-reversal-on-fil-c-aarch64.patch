@@ -1,0 +1,21 @@
+From: fil-c-utils maintainers
+Subject: [PATCH] Use portable bit reversal under Fil-C on AArch64
+
+7-Zip selects an inline ARM `rbit` instruction for Deflate's least-significant-
+bit-first decoder. Fil-C 0.683 does not support inline assembly on AArch64 and
+turns that instruction into a run-time trap. Select 7-Zip's existing lookup
+table implementation under Fil-C instead.
+
+--- a/CPP/7zip/Compress/BitlDecoder.h
++++ b/CPP/7zip/Compress/BitlDecoder.h
+@@ -15,7 +15,9 @@
+ const UInt32 kMask = (1 << kNumValueBits) - 1;
+ 
+ #if !defined(Z7_BITL_USE_REVERSE_BITS_TABLE)
+-#if 1 && defined(MY_CPU_ARM_OR_ARM64) \
++#if defined(__FILC__) && defined(MY_CPU_ARM64)
++  #define Z7_BITL_USE_REVERSE_BITS_TABLE
++#elif 1 && defined(MY_CPU_ARM_OR_ARM64) \
+     && (defined(MY_CPU_ARM64) || defined(__ARM_ARCH_6T2__) \
+        || defined(__ARM_ARCH) && (__ARM_ARCH >= 7)) \
+     && (defined(__GNUC__) && (__GNUC__ >= 4) \
