@@ -157,6 +157,8 @@ jobs:
       # because grep exits on the first match and readelf dies on SIGPIPE, so
       # the piped form reports failure on binaries that are perfectly fine.
       - name: Verify the binaries are static Fil-C builds
+        env:
+          EXPECTED_MACHINE: ${{ matrix.architecture == 'aarch64' && 'AArch64' || 'Advanced Micro Devices X86-64' }}
         run: |
           failed=0
           # Every real executable in the tree, so this needs no list of its own
@@ -166,9 +168,15 @@ jobs:
           echo "checking ${#binaries[@]} binaries"
           for binary in "${binaries[@]}"; do
             file "${binary}" > /tmp/desc.txt
+            readelf -hW "${binary}" > /tmp/header.txt
             readelf -lW "${binary}" > /tmp/segments.txt
             readelf -sW "${binary}" > /tmp/symbols.txt
 
+            machine="$(sed -n 's/^[[:space:]]*Machine:[[:space:]]*//p' /tmp/header.txt)"
+            if [ "${machine}" != "${EXPECTED_MACHINE}" ]; then
+              echo "${binary}: expected ${EXPECTED_MACHINE}, got ${machine}"
+              failed=1
+            fi
             if ! grep -Fq 'static-pie linked' /tmp/desc.txt; then
               echo "${binary}: not a static PIE"
               failed=1
