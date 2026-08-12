@@ -78,6 +78,14 @@ RUN chmod u+w CPP/7zip/Compress/BitlDecoder.h \
     && sed -i 's/\r$//' CPP/7zip/Compress/BitlDecoder.h \
     && patch --batch --forward -p1 < /tmp/7zip-fil-c-arm.patch
 
+COPY patches/0004-align-record-vector-items-on-fil-c-aarch64.patch /tmp/7zip-fil-c-arm-records.patch
+RUN for source in CPP/7zip/Archive/Rar/RarHandler.h \
+                  CPP/7zip/Archive/Udf/UdfHandler.h \
+                  CPP/7zip/Archive/SquashfsHandler.cpp; do \
+        chmod u+w "${source}" && sed -i 's/\r$//' "${source}"; \
+    done \
+    && patch --batch --forward -p1 < /tmp/7zip-fil-c-arm-records.patch
+
 WORKDIR /src/CPP/7zip/Bundles/Alone2
 RUN make -f makefile.gcc -j"$(nproc)" \
         CC=/opt/filc/build/bin/clang \
