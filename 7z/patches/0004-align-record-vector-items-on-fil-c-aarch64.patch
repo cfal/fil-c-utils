@@ -54,25 +54,27 @@ their array stride to 16 bytes without changing serialized formats.
    IInArchiveGetStream
 --- a/CPP/7zip/Archive/SquashfsHandler.cpp
 +++ b/CPP/7zip/Archive/SquashfsHandler.cpp
-@@ -806,13 +806,20 @@ static unsigned GetNodeHeaderSize(const Byte *p, size_t size, UInt16 Type)
-   return offset;
+@@ -1393,16 +1393,23 @@ HRESULT CHandler::ReadData(CData &data, UInt64 start, UInt64 end)
+   _dynOutStream->CopyToBuffer(data.Data);
+   return S_OK;
  }
  
 +#if defined(__FILC__) && defined(__aarch64__)
-+struct MY_ALIGN(8) CItem
++struct MY_ALIGN(8) CTempItem
 +#else
- struct CItem
+ struct CTempItem
 +#endif
  {
-   int Node;
-   int Parent;
-   UInt32 Ptr;
- 
-   void Construct() { Node = -1; Parent = -1; Ptr = 0; }
+   UInt32 StartBlock;
+   // UInt32 iNodeNumber1;
+   UInt32 Offset;
+   // UInt16 iNodeNumber2;
+   UInt16 Type;
  };
 +#if defined(__FILC__) && defined(__aarch64__)
-+static_assert(sizeof(CItem) == 16 && __alignof__(CItem) == 8, "Fil-C SquashFS record alignment");
++static_assert(sizeof(CTempItem) == 16 && __alignof__(CTempItem) == 8, "Fil-C SquashFS record alignment");
 +#endif
- 
- struct CData
+   
+ HRESULT CHandler::OpenDir(int parent, UInt32 startBlock, UInt32 offset, unsigned level, int &nodeIndex)
  {
+   if (level > kNumDirLevelsMax)
