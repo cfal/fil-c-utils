@@ -59,6 +59,9 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/gzip.tar.xz \
     && tar --strip-components=1 -xJf /tmp/gzip.tar.xz \
     && rm /tmp/gzip.tar.xz
 
+COPY patches/0001-disable-x87-control-word-assembly-under-fil-c.patch /tmp/gzip-fil-c.patch
+RUN patch --batch --forward -p1 < /tmp/gzip-fil-c.patch
+
 RUN FORCE_UNSAFE_CONFIGURE=1 \
     CC=/opt/filc/build/bin/clang \
     CFLAGS="-O2 -g -DGNU_STANDARD=0" \
@@ -78,6 +81,7 @@ RUN binary=/src/gzip \
     && grep -Eq "filc_call_user_main|zgc_alloc" /tmp/gzip.symbols \
     && strings -a "${binary}" > /tmp/gzip.strings \
     && ! grep -q "@llvm\." /tmp/gzip.strings \
+    && ! grep -Fq "cannot handle inline asm" /tmp/gzip.strings \
     && "${binary}" --version > /tmp/gzip.version \
     && grep -Fq "${GZIP_VERSION}" /tmp/gzip.version \
     && "${binary}" -c README > /tmp/smoke.gz \
