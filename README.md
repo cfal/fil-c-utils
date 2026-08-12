@@ -938,6 +938,14 @@ gzip defines `GNU_STANDARD=0` so its documented `gunzip` and `zcat` invocation
 names select decompression mode. The Dockerfile tests both aliases rather than
 assuming that creating the links is sufficient.
 
+gzip and nano both vendor gnulib's x87 control-word helper. On x86-64 its
+long-double formatting path normally saves and restores the precision control
+with inline `fnstcw` and `fldcw`, whose memory operands Fil-C turns into run-time
+traps. Fil-C's musl fenv implementation cannot change x87 precision, so the
+default extended precision remains in effect. Scoped patches omit the redundant
+save and restore under Fil-C. Both Dockerfiles reject the compiler's trap marker
+if any unsupported inline assembly remains.
+
 XZ uses `LDFLAGS=-Wc,-static` during `make`. Libtool consumes plain `-static`
 as a request to prefer static project libraries and otherwise emits a
 dynamically loaded Fil-C executable. `-Wc,-static` passes the flag through to
