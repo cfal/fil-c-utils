@@ -54,6 +54,17 @@ their array stride to 16 bytes without changing serialized formats.
    IInArchiveGetStream
 --- a/CPP/7zip/Archive/SquashfsHandler.cpp
 +++ b/CPP/7zip/Archive/SquashfsHandler.cpp
+@@ -809,1 +809,5 @@
++#if defined(__FILC__) && defined(__aarch64__)
++struct MY_ALIGN(8) CItem
++#else
+ struct CItem
++#endif
+@@ -817,1 +821,4 @@
+ };
++#if defined(__FILC__) && defined(__aarch64__)
++static_assert(sizeof(CItem) == 16 && __alignof__(CItem) == 8, "Fil-C SquashFS record alignment");
++#endif
 @@ -1393,16 +1393,23 @@ HRESULT CHandler::ReadData(CData &data, UInt64 start, UInt64 end)
    _dynOutStream->CopyToBuffer(data.Data);
    return S_OK;
