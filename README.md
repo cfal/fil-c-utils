@@ -908,6 +908,13 @@ the definition and the dispatch for each path, since 7-Zip repeats the same
 compiler-version block in `AesOpt.c` and `Aes.c` and `MyAes.cpp`, and again in
 `Sha512Opt.c` and `Sha512.c`. SSE and AES-NI stay enabled.
 
+Three 7-Zip handlers keep 12-byte POD records in `CRecordVector`. The AArch64
+ABI copies those values with an 8-byte access followed by a 4-byte access, while
+their normal 12-byte stride leaves every other element only 4-byte aligned.
+Fil-C correctly rejects that widened access. An ARM-only patch aligns the RAR,
+UDF, and SquashFS records to 8 bytes, making their internal stride 16 bytes. The
+change costs 4 bytes per live record and does not affect any on-disk layout.
+
 unRAR normally enables packed structures and misaligned integer access on
 x86-64 and ARM64. Fil-C requires pointer slots to retain their natural
 alignment, so the unRAR patch selects the existing alignment-safe code paths
