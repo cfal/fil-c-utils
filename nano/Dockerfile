@@ -142,6 +142,9 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/nano.tar.xz \
     && tar --strip-components=1 -xJf /tmp/nano.tar.xz \
     && rm /tmp/nano.tar.xz
 
+COPY patches/0001-disable-x87-control-word-assembly-under-fil-c.patch /tmp/nano-fil-c.patch
+RUN patch --batch --forward -p1 < /tmp/nano-fil-c.patch
+
 # All of nano's features are on by default; only --enable-tiny and the
 # individual --disable-* flags take any away, and none are given here. The
 # explicit --enable-utf8 and the presence of libmagic are the two that depend
@@ -178,6 +181,7 @@ RUN binary=/src/src/nano; failed=0; \
     grep -Eq "filc_call_user_main|zgc_alloc" /tmp/nano.symbols || { echo "FAIL: no Fil-C runtime symbol"; failed=1; }; \
     strings -a "${binary}" > /tmp/nano.strings; \
     grep -q "@llvm\." /tmp/nano.strings && { echo "FAIL: unhandled intrinsic:"; grep -o "@llvm\.[a-z0-9._]*" /tmp/nano.strings | sort -u; failed=1; }; \
+    grep -Fq "cannot handle inline asm" /tmp/nano.strings && { echo "FAIL: unsupported inline assembly"; failed=1; }; \
     "${binary}" --version > /tmp/nano.version 2>&1; \
     grep -Fq "version ${NANO_VERSION}" /tmp/nano.version || { echo "FAIL: version string; got: $(cat /tmp/nano.version)"; failed=1; }; \
     test "${failed}" -eq 0 && echo "nano provenance checks passed"; \
