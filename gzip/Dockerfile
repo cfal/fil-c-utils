@@ -53,8 +53,11 @@ RUN case "${TARGETARCH}" in \
     && rm /tmp/filc.tar.xz
 
 WORKDIR /src
+# GNU's mirror redirector avoids recurring ARM-runner routing timeouts to the
+# primary FTP host. The pinned checksum remains the source-of-truth integrity
+# check regardless of which official mirror serves the archive.
 RUN curl -fsSL ${FETCH_RETRY} -o /tmp/gzip.tar.xz \
-        "https://ftp.gnu.org/gnu/gzip/gzip-${GZIP_VERSION}.tar.xz" \
+        "https://ftpmirror.gnu.org/gzip/gzip-${GZIP_VERSION}.tar.xz" \
     && echo "${GZIP_SHA256}  /tmp/gzip.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/gzip.tar.xz \
     && rm /tmp/gzip.tar.xz
