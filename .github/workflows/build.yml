@@ -44,12 +44,10 @@ jobs:
     needs: prepare
     env:
       PLATFORM: ${{ matrix.architecture == 'aarch64' && 'linux/arm64' || 'linux/amd64' }}
-    # git is the outlier: its own suite is over a thousand test files and runs
-    # at half the processors, which on a hosted runner takes hours rather than
-    # the minutes every other utility needs. Raising the ceiling for all of them
-    # would mean a genuinely stuck build elsewhere burned that time before
-    # failing, so only git gets the longer one.
-    timeout-minutes: ${{ matrix.utility == 'git' && 300 || 120 }}
+    # git and OpenSSH run unusually large upstream suites. Raising the ceiling
+    # for every utility would let a genuinely stuck build elsewhere burn that
+    # time, so only those two get longer limits.
+    timeout-minutes: ${{ (matrix.utility == 'git' && 300) || (matrix.utility == 'openssh-server' && 240) || 120 }}
     strategy:
       fail-fast: false
       matrix:
@@ -62,25 +60,20 @@ jobs:
 
       - name: Build ${{ matrix.utility }}
         run: |
-          mkdir -p "staging/${{ matrix.utility }}"
           # wget's HTTPS test suite resolves a fixed hostname through glibc's
           # HOSTALIASES, which the musl-built client ignores; the mapping is
           # supplied through /etc/hosts, which musl reads, because the Dockerfile
           # cannot write /etc/hosts during a build. Harmless to other utilities.
           add_host=""
           [ "${{ matrix.utility }}" = wget ] && add_host="--add-host=WgetTestingServer:127.0.0.1"
+          # The local exporter normalizes ownership and strips setuid bits.
+          # Docker's tar exporter preserves the artifact filesystem metadata.
           docker build \
             ${add_host} \
             --platform "${PLATFORM}" \
             --target artifact \
-            --output "type=local,dest=staging/${{ matrix.utility }}" \
+            --output "type=tar,dest=${{ matrix.utility }}.tar" \
             "./${{ matrix.utility }}"
-
-      # Tar before uploading. upload-artifact resolves symlinks into duplicate
-      # files and does not preserve the executable bit, and the artifact tree
-      # relies on both: twelve of the twenty commands are symlinks.
-      - name: Pack build output
-        run: tar -cf "${{ matrix.utility }}.tar" -C "staging/${{ matrix.utility }}" .
 
       - uses: actions/upload-artifact@v7
         with:

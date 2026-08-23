@@ -65,7 +65,7 @@ jobs:
         run: |
           mkdir -p out
           for tarball in stages/stage-${{ matrix.architecture }}-*/*.tar; do
-            tar -xf "${tarball}" -C out
+            tar -xpf "${tarball}" -C out
           done
           find out -maxdepth 1 -mindepth 1 | sort
 
@@ -114,7 +114,7 @@ jobs:
     name: bundle (${{ matrix.architecture }})
     runs-on: ${{ matrix.architecture == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     needs: [build, test]
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -133,7 +133,7 @@ jobs:
           mkdir -p out
           for tarball in stages/stage-${{ matrix.architecture }}-*/*.tar; do
             echo "unpacking ${tarball}"
-            tar -xf "${tarball}" -C out
+            tar -xpf "${tarball}" -C out
           done
           find out -maxdepth 1 -mindepth 1 | sort
 
@@ -150,6 +150,8 @@ jobs:
             fi
           done < <(./build-all.sh --list executables)
           test -d out/licenses || { echo 'missing out/licenses'; missing=1; }
+          test "$(stat -c '%a' out/libexec/ssh-keysign)" = 4711 \
+            || { echo 'out/libexec/ssh-keysign is not mode 4711'; missing=1; }
           exit "${missing}"
 
       # Every check reads a file rather than piping into grep. GitHub runs each
@@ -164,7 +166,8 @@ jobs:
           # Every real executable in the tree, so this needs no list of its own
           # and covers extras like bzip2recover. Symlinks are excluded because
           # they resolve to a binary already checked.
-          mapfile -t binaries < <(find out/bin -maxdepth 1 -type f -executable | sort)
+          mapfile -t binaries < <(find out/bin out/libexec -maxdepth 1 \
+            -type f -executable | sort)
           echo "checking ${#binaries[@]} binaries"
           for binary in "${binaries[@]}"; do
             file "${binary}" > /tmp/desc.txt
@@ -217,6 +220,8 @@ jobs:
           mv out "${name}"
           tar -czf "${name}.tar.gz" \
             --owner=0 --group=0 --numeric-owner --sort=name "${name}"
+          tar -tvzf "${name}.tar.gz" > /tmp/archive.list
+          grep -Eq '^-rws--x--x .*libexec/ssh-keysign$' /tmp/archive.list
           sha256sum "${name}.tar.gz" > "${name}.tar.gz.sha256"
           echo "name=${name}" >> "${GITHUB_OUTPUT}"
           ls -l "${name}.tar.gz"
