@@ -1,0 +1,69 @@
+From: fil-c-utils maintainers
+Subject: [PATCH] Report the process title through the Fil-C runtime
+
+Linux selects the SPT_REUSEARGV path, but under Fil-C the argv area belongs to
+the runtime and cannot be overwritten in place. Skip that path's argv and
+environment bookkeeping, then route titles through zsetproctitle(), which the
+runtime exposes in stdfil.h. Everything is guarded on __FILC__ so other builds
+keep the upstream mechanism.
+
+--- a/openbsd-compat/setproctitle.c
++++ b/openbsd-compat/setproctitle.c
+@@ -46,6 +46,10 @@
+ 
+ #include <vis.h>
+ 
++#ifdef __FILC__
++#include <stdfil.h>
++#endif
++
+ #define SPT_NONE	0	/* don't use it at all */
+ #define SPT_PSTAT	1	/* use pstat(PSTAT_SETCMD, ...) */
+ #define SPT_REUSEARGV	2	/* cover argv with title information */
+@@ -58,7 +62,7 @@
+ # define SPT_PADCHAR	'\0'
+ #endif
+ 
+-#if SPT_TYPE == SPT_REUSEARGV
++#if SPT_TYPE == SPT_REUSEARGV && !defined(__FILC__)
+ static char *argv_start = NULL;
+ static size_t argv_env_len = 0;
+ #endif
+@@ -69,7 +73,7 @@
+ compat_init_setproctitle(int argc, char *argv[])
+ {
+ #if !defined(HAVE_SETPROCTITLE) && \
+-    defined(SPT_TYPE) && SPT_TYPE == SPT_REUSEARGV
++    defined(SPT_TYPE) && SPT_TYPE == SPT_REUSEARGV && !defined(__FILC__)
+ 	extern char **environ;
+ 	char *lastargv = NULL;
+ 	char **envp = environ;
+@@ -123,7 +127,7 @@
+ void
+ setproctitle(const char *fmt, ...)
+ {
+-#if SPT_TYPE != SPT_NONE
++#if SPT_TYPE != SPT_NONE || defined(__FILC__)
+ 	va_list ap;
+ 	char buf[1024], ptitle[1024];
+ 	size_t len = 0;
+@@ -133,7 +137,7 @@
+ 	union pstun pst;
+ #endif
+ 
+-#if SPT_TYPE == SPT_REUSEARGV
++#if SPT_TYPE == SPT_REUSEARGV && !defined(__FILC__)
+ 	if (argv_env_len <= 0)
+ 		return;
+ #endif
+@@ -153,7 +157,9 @@
+ 	strnvis(ptitle, buf, sizeof(ptitle),
+ 	    VIS_CSTYLE|VIS_NL|VIS_TAB|VIS_OCTAL);
+ 
+-#if SPT_TYPE == SPT_PSTAT
++#ifdef __FILC__
++	zsetproctitle(ptitle);
++#elif SPT_TYPE == SPT_PSTAT
+ 	pst.pst_command = ptitle;
+ 	pstat(PSTAT_SETCMD, pst, strlen(ptitle), 0, 0);
+ #elif SPT_TYPE == SPT_REUSEARGV
