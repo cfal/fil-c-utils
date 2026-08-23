@@ -162,6 +162,17 @@ def expat_latest():
     return newest(t["name"][2:].replace("_", ".") for t in tags if t["name"].startswith("R_"))
 
 
+def openbsd_openssh():
+    # OpenSSH portable names its releases openssh-X.YpN.tar.gz. The p-series
+    # numbering does not fit the generic stable filter, so pick the newest
+    # here by comparing the numeric fields directly.
+    html = get_text("https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/")
+    found = re.findall(r"openssh-(\d+\.\d+p\d+)\.tar\.gz", html)
+    if not found:
+        raise RuntimeError("no openssh-*.tar.gz found on cdn.openbsd.org")
+    return max(found, key=lambda v: tuple(int(p) for p in re.findall(r"\d+", v)))
+
+
 # ------------------------------------------------------------------ components
 # Each row: label, Dockerfile, the ARG holding the pin, and how to find latest.
 COMPONENTS = [
@@ -194,6 +205,7 @@ COMPONENTS = [
     ("ncurses",  "tmux/Dockerfile", "NCURSES_VERSION",  lambda: gnu_ftp("ncurses")),
     ("git",   "git/Dockerfile", "GIT_VERSION",   lambda: github_latest("git/git", "v")),
     ("expat", "git/Dockerfile", "EXPAT_VERSION", expat_latest),
+    ("openssh", "openssh-server/Dockerfile", "OPENSSH_VERSION", openbsd_openssh),
 ]
 
 
