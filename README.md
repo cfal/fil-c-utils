@@ -246,19 +246,24 @@ docker run --rm -v /etc/ssl/certs/ca-certificates.crt:/ca.pem:ro \
 
 ## Checking an artifact
 
-The Dockerfiles reject an artifact unless it is static, has Fil-C symbols, and
-passes the project's tests. You can inspect a built binary yourself:
+The build and bundle gates reject an artifact unless it has the expected
+architecture, is static, has Fil-C symbols, contains no known compiler-trap
+marker, and passes the project's tests. You can inspect a built binary yourself:
 
 ```sh
 file out/bin/tar
+readelf -hW out/bin/tar | grep Machine
 readelf -lW out/bin/tar | grep INTERP
 readelf -sW out/bin/tar | grep -m1 pizlonated
 readelf -sW out/bin/tar | grep -Em1 'filc_call_user_main|zgc_alloc'
+strings -a out/bin/tar | grep -E '@llvm\.|cannot handle inline asm'
 ```
 
-`file` should say `static-pie linked`. The `INTERP` command should print
-nothing and exit nonzero. The symbol commands should find Fil-C-transformed
-names and a Fil-C runtime symbol. `ldd` alone is not a sufficient provenance
+`file` should say `static-pie linked`, and `Machine` should match the selected
+build platform. The `INTERP` command should print nothing and exit nonzero. The
+symbol commands should find Fil-C-transformed names and a Fil-C runtime symbol.
+The `strings` command should also print nothing: both patterns identify code
+Fil-C replaced with a run-time trap. `ldd` alone is not a sufficient provenance
 check.
 
 Shipped executables are built with `-g` and then stripped of debug information,
@@ -385,7 +390,7 @@ different directory and `WORK_DIR` to move its scratch space, which defaults to
 
 | Stage | What it establishes |
 | --- | --- |
-| `alignment` | No binary places a pointer field at an unaligned offset |
+| `alignment` | No compiler traps in any binary; with unstripped DWARF, no unaligned pointer fields |
 | `corpus` | Builds ~345 valid archives and 27 hostile ones |
 | `roundtrip` | Patched code paths run, valid archives restore byte for byte, host tools agree |
 | `safety` | No hostile archive writes outside the extraction directory |
@@ -398,8 +403,11 @@ and the run says so; every other stage works from Python 3 alone.
 
 Three defects share an awkward shape: they compile cleanly, link cleanly, pass
 ordinary functional tests, and then abort at run time on a machine or an input
-that happens to reach them. This stage finds all three by reading the binary,
-so none needs the trigger to be reproduced.
+that happens to reach them. This stage finds all three by reading binaries, so
+none needs the trigger to be reproduced. The two compiler-trap checks work on
+shipped artifacts; the pointer-layout check needs the DWARF retained in the
+unstripped build stage. A normal run against `out/` therefore reports that
+half as `PARTIAL`, never as a completed alignment check.
 
 **Misaligned pointer fields.** Fil-C stores a capability beside every pointer
 slot and requires those slots to keep their natural alignment. A
@@ -421,8 +429,9 @@ Fil-C's inline-assembly trap marker.
 
 The compiler-trap checks are also asserted by the affected utility Dockerfiles,
 and compatibility patches have focused functional assertions. The shared stage
-is the backstop over every shipped executable and remains the cheapest one to
-run after a dependency upgrade.
+is the compiler-trap backstop over every shipped executable and remains the
+cheapest one to run after a dependency upgrade. Structural alignment is instead
+gated by focused compile-time assertions or a scan of unstripped build outputs.
 
 ### The roundtrip stage
 
@@ -619,8 +628,10 @@ RAR compression algorithm. Review `out/licenses/` before redistribution.
 - zstd's optional gzip, xz, and lz4 compatibility integrations are disabled to
   prevent accidental linkage against host libraries. Native `.zst` support and
   threading are enabled.
-- Debug information is retained intentionally, so binaries are significantly
-  larger than conventional stripped distribution builds.
+- Build-stage binaries retain DWARF for validation. Shipped binaries use
+  `--strip-debug`, preserving `.symtab` and Fil-C's own diagnostic metadata but
+  removing DWARF. Static Fil-C runtime and metadata still make them larger than
+  conventional dynamically linked distribution builds.
 - curl is built without HTTP/2, HTTP/3, brotli, zstd, IDN, PSL and LDAP. It
   keeps HTTP/1.1, TLS via OpenSSL, gzip via zlib, and the protocols OpenSSL and
   musl support unaided.
@@ -824,12 +835,12 @@ artifact rather than trusting the round trip through artifact storage.
 
 ### Version freshness
 
-`versions.yml` runs when a pull request is opened and checks every pinned
-upstream version against its latest release. If any pin is behind, it posts the
-report as a comment on the pull request. It never fails the workflow: a
-dependency falling behind is worth putting in front of a reviewer, but it is
-not a reason to block a change that touches none of it. When every pin is
-current it stays silent.
+`versions.yml` runs when a pull request is opened and checks every upstream pin
+registered in `check-versions.py` against its latest release. If any registered
+pin is behind, it posts the report as a comment on the pull request. It never
+fails the workflow: a dependency falling behind is worth putting in front of a
+reviewer, but it is not a reason to block a change that touches none of it.
+When every registered pin is current it stays silent.
 
 It runs `check-versions.py`, which reads each pin from its Dockerfile, asks each
 upstream for its newest release, and prints one row per component:
@@ -841,10 +852,12 @@ component  pinned     latest     status
 curl       8.19.0     8.21.0     OUTDATED
 ```
 
-Every upstream has a different release source, so the sources are queried
-differently: GitHub releases for 7-Zip, XZ, Zstandard, curl, OpenSSL, and zlib;
-the GNU FTP listing for tar and gzip; sourceware for bzip2; and rarlab for
-unRAR. The curl build's bundled OpenSSL and zlib are checked too.
+The `COMPONENTS` table is explicit rather than discovered from Dockerfile
+arguments. Every upstream has a different release source, so the registered
+sources are queried differently: GitHub releases for 7-Zip, XZ, Zstandard,
+curl, OpenSSL, and zlib; GNU listings for GNU projects; sourceware for bzip2;
+and rarlab for unRAR. A new maintained release pin needs a table entry and an
+upstream-specific lookup or it will not receive freshness reports.
 
 The check never stops at the first problem. A component whose upstream is
 unreachable, or whose listing has changed shape, is reported as an error and
@@ -858,11 +871,11 @@ python3 check-versions.py
 
 Two caveats. OpenSSL maintains several release branches in parallel (a 3.5.x
 alongside a 4.0.x, for instance) and marks the newest of each as a release, so
-"latest" here means the highest version overall; a pin deliberately tracking an
-older branch will read as `OUTDATED`. Fil-C itself is not checked: it is the
-toolchain rather than a utility, and moving it is a larger decision than a pin
-bump. A pull request opened from a fork gets a read-only token and cannot be
-commented on; the check still runs and prints its report to the workflow log.
+each pin must be compared with the branch it intentionally follows. Fil-C
+itself is not checked: it is the toolchain rather than a utility, and moving it
+is a larger compatibility decision than a pin bump. A pull request opened from
+a fork gets a read-only token and cannot be commented on; the check still runs
+and prints its report to the workflow log.
 
 ### Build design
 
@@ -870,20 +883,52 @@ The builders use Fil-C's Pizfix/musl release rather than the glibc-oriented
 host installation. Pizfix includes the static libc, C++ library, and Fil-C
 runtime archives needed for standalone executables.
 
-Debug information is retained because Fil-C safety failures produce much more
-useful diagnostics with symbols. Before export, every native executable is
-checked for:
+Every Dockerfile builds with `-g` and checks its unstripped native executables
+before staging them. Across the Dockerfile and bundle gates, every shipped ELF,
+including helper programs outside `bin/`, is checked for:
 
+- the expected x86-64 or AArch64 ELF machine
 - `static-pie linked` in `file` output
 - no ELF `INTERP` program header
-- a DWARF `.debug_info` section
+- a DWARF `.debug_info` section before stripping
 - `pizlonated` transformed symbols
 - a Fil-C runtime symbol such as `filc_call_user_main` or `zgc_alloc`
-- successful startup and a real compression or archive round trip
+- no embedded `@llvm.` unhandled-intrinsic marker
+- no embedded `cannot handle inline asm` marker
+- successful startup and a meaningful functional round trip
+
+The staged copies use `strip --strip-debug`, not a full strip. That removes
+DWARF while retaining `.symtab`, so anyone holding an artifact can still verify
+the transformed and runtime symbols. Fil-C's diagnostic metadata remains too,
+so a safety failure still identifies its source location. Static-link and
+provenance checks run again against the stripped copies, and exported aliases
+are invoked by name before shipping.
 
 The `scratch` artifact stage is both the local-export tree and the final image.
 It ensures an accidentally dynamic binary cannot appear to work merely because
-the builder's loader or libraries are available.
+the builder's loader or libraries are available. It also makes required helper
+paths and runtime data explicit. Every utility exports its own license, the
+licenses of its static dependencies, and the Fil-C runtime licenses beside the
+binaries.
+
+### Architecture support
+
+Every utility supports both `linux/amd64` and `linux/arm64`. Docker exposes
+those targets to a Dockerfile as `TARGETARCH=amd64` and `TARGETARCH=arm64`,
+while Fil-C names its release assets `x86_64` and `aarch64`. Each Dockerfile's
+architecture switch maps those names, selects a separate checksum pin, and
+rejects any unknown target.
+
+The CI build, robustness, audit, and bundle jobs use native runners for both
+architectures. Dockerfiles execute the programs and their upstream suites while
+building, so native CI is the authoritative gate; emulated local builds can be
+much slower. Stage artifacts and download patterns include the architecture to
+prevent valid binaries from different machines being merged into one bundle.
+
+Architecture-specific source patches are guarded with both `__FILC__` and the
+compiler's target macro. An ARM workaround must leave x86 code generation
+unchanged unless the investigation also found a shared x86 defect, and vice
+versa.
 
 ### Compatibility details
 
@@ -932,9 +977,10 @@ fixture archives, because valid RAR files rarely drive the RAR3 PPMd decoder
 deep enough to write through one of those fields. It then panics on a RAR3
 archive that does. The Dockerfile therefore compiles a translation unit that
 asserts `ALLOW_MISALIGNED` is undefined and that each PPMd pointer member sits
-at a multiple of `alignof(void *)`. The `alignment` stage in `tests/` re-checks
-the same property from the shipped binary's DWARF, which also catches an `out/`
-tree left over from an earlier build.
+at a multiple of `alignof(void *)`. The `alignment` stage can re-check the same
+property from an unstripped build's DWARF. Shipped `out/` binaries have no
+DWARF, so that run checks compiler traps but reports structural alignment as
+`PARTIAL`; the focused compile-time assertion remains the build gate.
 
 GNU tar's bundled obstack implementation normally aligns pointers relative to
 address zero. The tar patch uses the obstack allocation as the alignment base
@@ -1072,48 +1118,74 @@ are.
 2. Download the release from the authoritative upstream location and calculate
    its SHA-256 checksum.
 3. Update the checksum in the pinned-input table above.
-4. Rebase compatibility patches onto the pristine new release.
-5. Run a no-cache Docker build for the changed utility.
-6. Run `./build-all.sh`, then `./tests/run-tests.sh`.
+4. Confirm its `check-versions.py` registration and release-series policy;
+   add an entry for a newly maintained source.
+5. Refresh compatibility patches against a pristine copy of the new release.
+6. Run a no-cache Docker build for the changed utility, then rebuild the
+   complete output before running the robustness suite.
 
 For example:
 
 ```sh
+rm -rf "$HOME/filc-zstd-amd64"
 docker build --no-cache \
   --platform linux/amd64 \
   --target artifact \
-  --output type=local,dest=/tmp/filc-zstd \
+  --output type=local,dest="$HOME/filc-zstd-amd64" \
   ./zstd
 
-./build-all.sh
+PLATFORM=linux/amd64 ./build-all.sh
 ./tests/run-tests.sh --iters 24
 ```
 
-Repeat architecture-sensitive changes with `--platform linux/arm64`, or rely
-on the pull-request workflow's native aarch64 build and full robustness suite.
+Remove or choose a fresh local-export destination before each individual
+build: Docker merges into an existing destination. Repeat the build and suite
+with `PLATFORM=linux/arm64` when native ARM hardware is available. In all cases,
+the pull-request workflow's native x86_64 and AArch64 matrices are the
+authoritative dual-architecture gate.
 
 Run `./build-all.sh` before the suite, not after. `out/` is a build product,
 and an individual `docker build --output` merges into whatever is already
 there, so a stale executable can survive an upgrade and be tested in place of
-the one the Dockerfile now describes. The `alignment` stage catches the specific
-case where a stale binary predates a Fil-C patch, but it cannot catch every
-kind of drift.
+the one the Dockerfile now describes. `build-all.sh` avoids that by staging all
+utilities and replacing `out/` only after every build succeeds. The alignment
+stage cannot reliably identify stale shipped binaries because they contain no
+DWARF.
 
-Do not weaken a checksum, static-link assertion, Fil-C symbol assertion, or
-functional test merely to make an upgrade pass. Document new compatibility
-flags or patches here with the Fil-C limitation they address.
+Do not weaken a checksum, static-link assertion, Fil-C symbol assertion,
+compiler-trap check, expected test count, or functional test merely to make an
+upgrade pass. Do not silently disable a feature or allow a suite to skip its
+coverage. Document new compatibility flags, deliberate skips, disabled
+features, or patches here with the Fil-C limitation they address.
 
 ### Adding a utility
 
-A new utility gets one subdirectory and one Dockerfile. Its source must come
-from an authoritative, checksum-pinned release. Compile every native
-translation unit with Fil-C, link statically, preserve debug information, run
-a meaningful functional test, export all applicable licenses, and use a
-`scratch` artifact stage.
+A new utility gets one subdirectory and one Dockerfile. Its source and every
+statically linked dependency must come from authoritative, version-pinned
+releases whose SHA-256 checksums are verified before extraction. Reuse the
+existing `TARGETARCH` mapping and checksum-pinned Fil-C Pizfix/musl toolchains
+for both architectures.
+
+Compile every shipped native translation unit and dependency with Fil-C and
+link each executable as a static PIE with no interpreter. Audit all native
+helpers as well as `bin/`: require DWARF before stripping, Fil-C transformed and
+runtime symbols, and no `@llvm.` or `cannot handle inline asm` trap marker. Use
+`strip --strip-debug`, retain `.symtab`, then repeat the static-link and
+provenance checks against the staged copies.
+
+Run the official upstream suite against the Fil-C build whenever one exists.
+Keep the same compiler and link flags if it rebuilds programs, arrange the
+fixtures needed to prevent silent skips, and assert a test-count floor or exact
+intentional skip set. Run a meaningful functional workflow and every exported
+command or invocation-name alias against the stripped artifact. Export the
+utility, dependency, and Fil-C licenses, preserve required helper/data paths,
+exclude build-host secrets, and finish with a `scratch` artifact stage.
 
 Add the directory name to `UTILITIES` and every exported executable or alias to
 `EXECUTABLES` in `build-all.sh`. Extend the user-facing command table, output
-tree, pins, limitations, and compatibility notes in this README.
+tree, pins, limitations, compatibility notes, and license list in this README.
+Add maintained release pins to `check-versions.py`; only explicit `COMPONENTS`
+entries receive freshness reports.
 
 CI needs no change for a new utility. It builds the utilities in parallel
 rather than calling `build-all.sh`, but it reads both lists from the script
