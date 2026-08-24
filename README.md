@@ -763,7 +763,12 @@ RAR compression algorithm. Review `out/licenses/` before redistribution.
   lower the overflow traps from OpenSSH's `-ftrapv` hardening flag, so this
   build uses `-fwrapv`: signed overflow is defined to wrap instead of aborting.
   Fil-C still checks every memory access, but a non-memory overflow logic bug
-  continues with the wrapped value rather than failing immediately.
+  continues with the wrapped value rather than failing immediately. On
+  AArch64, sntrup761 uses cryptoint's portable C because Fil-C 0.683 cannot
+  lower its AArch64 inline assembly; sntrup and ML-KEM remain enabled.
+  Cryptoint intends this fallback to resist timing-changing optimization but
+  does not guarantee constant-time execution, and its Fil-C/AArch64 machine
+  code has not been side-channel audited.
 - tmux is built with sixel image support and utf8proc, which replaces its
   built-in character-width tables with fuller Unicode ones. systemd integration
   is left off: it would link libsystemd and defeat a self-contained static
@@ -1242,6 +1247,10 @@ Finally, Fil-C 0.683 misclassifies a byte-aligned libcrux aggregate in the
 aarch64 calling convention. A Fil-C/AArch64-only alignment attribute works
 around that compiler bug without disabling OpenSSH's ML-DSA or ML-KEM support;
 a static layout assertion and native cryptographic tests guard the workaround.
+The generated sntrup761 cryptoint code has a separate AArch64 assembly path
+that Fil-C 0.683 cannot lower. A fourth patch selects cryptoint's portable C
+fallbacks only on Fil-C/AArch64; sntrup761x25519 remains enabled, while x86-64
+and non-Fil-C AArch64 builds retain their assembly paths.
 
 ### Updating a dependency
 
