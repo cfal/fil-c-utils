@@ -1,0 +1,95 @@
+From: fil-c-utils maintainers
+Subject: [PATCH] Prepare the seccomp sandbox for the Fil-C runtime
+
+The preauth child runs the Fil-C runtime after fork, and the upstream filter
+was written for a plain single-threaded libc. The OpenSSH 10.3p1 port that
+ships in Fil-C 0.683 makes these adjustments:
+
+  - zlock_runtime_threads() before the filter is installed. It is the last
+    chance the runtime has to create threads, and this tells it neither to
+    start new ones nor to restart ones the child still needs. Without it the
+    runtime's own syscalls trip the filter and kill the child.
+  - Allow sched_yield, which the runtime's wait loops issue in the child,
+    and MAP_NORESERVE on the fixed-address mmap the filter already allows,
+    which is how the runtime asks for address space there.
+  - Fail with SECCOMP_RET_KILL_PROCESS rather than SECCOMP_RET_KILL: a
+    violation means the process is no longer in a state to reason about, and
+    killing one thread of a runtime-managed process leaves the rest running on
+    corrupted assumptions.
+
+This rebase gates everything on __FILC__ so an unpatched build keeps upstream's
+filter exactly.
+
+--- a/sandbox-seccomp-filter.c
++++ b/sandbox-seccomp-filter.c
+@@ -76,8 +76,21 @@
+ #include "ssh-sandbox.h"
+ #include "xmalloc.h"
+ 
++#ifdef __FILC__
++#include <stdfil.h>
++#endif
++
+ /* Linux seccomp_filter sandbox */
++#ifdef __FILC__
++/*
++ * Kill the whole process rather than only the offending thread: the Fil-C
++ * runtime owns threads this filter was not designed around, and a violation
++ * means the process is no longer in a state anyone can reason about.
++ */
++#define SECCOMP_FILTER_FAIL SECCOMP_RET_KILL_PROCESS
++#else
+ #define SECCOMP_FILTER_FAIL SECCOMP_RET_KILL
++#endif
+ 
+ /* Use a signal handler to emit violations when debugging */
+ #ifdef SANDBOX_SECCOMP_FILTER_DEBUG
+@@ -192,9 +205,17 @@
+ 
+ #if defined(__NR_mmap) || defined(__NR_mmap2)
+ # ifdef MAP_FIXED_NOREPLACE
+-#  define SC_MMAP_FLAGS MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED|MAP_FIXED_NOREPLACE
++#  ifdef __FILC__
++#   define SC_MMAP_FLAGS MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED|MAP_FIXED_NOREPLACE|MAP_NORESERVE
++#  else
++#   define SC_MMAP_FLAGS MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED|MAP_FIXED_NOREPLACE
++#  endif
+ # else
+-#  define SC_MMAP_FLAGS MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED
++#  ifdef __FILC__
++#   define SC_MMAP_FLAGS MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED|MAP_NORESERVE
++#  else
++#   define SC_MMAP_FLAGS MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED
++#  endif
+ # endif /* MAP_FIXED_NOREPLACE */
+ /* Use this for both __NR_mmap and __NR_mmap2 variants */
+ # define SC_MMAP(_nr) \
+@@ -290,6 +311,12 @@
+ #ifdef __NR_brk
+ 	SC_ALLOW(__NR_brk),
+ #endif
++#ifdef __FILC__
++/* The Fil-C runtime spins on sched_yield in the sandboxed child. */
++#ifdef __NR_sched_yield
++	SC_ALLOW(__NR_sched_yield),
++#endif
++#endif
+ #ifdef __NR_clock_gettime
+ 	SC_ALLOW(__NR_clock_gettime),
+ #endif
+@@ -536,6 +563,15 @@
+ {
+ 	struct rlimit rl_zero, rl_one = {.rlim_cur = 1, .rlim_max = 1};
+ 
++#ifdef __FILC__
++	/*
++	 * This is the last chance the Fil-C runtime has to create threads
++	 * before the filter is installed; tell it so it neither starts new
++	 * ones nor shuts down and restarts ones the child still needs.
++	 */
++	zlock_runtime_threads();
++#endif
++
+ 	/* Set rlimits for completeness if possible. */
+ 	rl_zero.rlim_cur = rl_zero.rlim_max = 0;
+ 	if (setrlimit(RLIMIT_FSIZE, &rl_zero) == -1)

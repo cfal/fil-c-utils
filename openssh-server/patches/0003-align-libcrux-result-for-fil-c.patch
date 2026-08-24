@@ -1,0 +1,36 @@
+From: fil-c-utils maintainers
+Subject: [PATCH] Align the libcrux Result payload for Fil-C
+
+OpenSSH 10.5p1's generated libcrux code returns an eight-byte array from a
+tagged Result whose payload begins at offset one. Fil-C 0.683's aarch64 calling
+convention lowering incorrectly represents every aggregate of at most sixteen
+bytes as capability pointers, even when its natural alignment is less than
+eight bytes. Returning this valid byte-aligned Result therefore emits an
+eight-byte-aligned pointer load and panics at runtime. Fil-C fixes the compiler
+bug in e0ded6df4296a6b1170f19e5faedaa7c08b90a02.
+
+Align only this payload for AArch64 Fil-C releases that predate the compiler
+fix, and assert the layout on those builds so generated-source drift fails
+closed. Other targets and compilers retain the generated layout.
+
+--- a/libcrux_internal.h
++++ b/libcrux_internal.h
+@@ -3600,10 +3600,18 @@ typedef struct core_result_Result_8e_s
+     Eurydice_array_u8x8 case_Ok;
+     core_array_TryFromSliceError case_Err;
+   }
++#if defined(__FILC__) && defined(__aarch64__)
++  __attribute__((aligned(8)))
++#endif
+   val;
+ }
+ core_result_Result_8e;
+ 
++#if defined(__FILC__) && defined(__aarch64__)
++_Static_assert(__builtin_offsetof(core_result_Result_8e, val) == 8,
++    "libcrux Result payload must be 8-byte aligned");
++#endif
++
+ /**
+ This function found in impl {core::result::Result<T, E>[TraitClause@0, TraitClause@1]}
+ */

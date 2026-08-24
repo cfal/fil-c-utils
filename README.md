@@ -21,11 +21,13 @@ Included utilities:
 | GNU nano | `nano` |
 | tmux | `tmux` |
 | git | `git` |
+| OpenSSH | `ssh`, `sshd`, `scp`, `sftp`, `ssh-add`, `ssh-agent`, `ssh-keygen`, `ssh-keyscan` |
 
 Every utility here reads untrusted input: seven of them parse archives, curl
 and wget speak to the network, git clones from it, nano opens whatever file it
-is pointed at, and tmux parses the escape sequences everything running in its
-panes emits.
+is pointed at, tmux parses the escape sequences everything running in its
+panes emits, and sshd parses the wire protocol of remote peers it has not
+authenticated yet.
 Fil-C turns spatial and temporal memory-safety violations into deterministic
 process failures. That is useful defense in depth for programs that process
 untrusted archives. It does not replace sandboxing, least privilege, archive
@@ -47,9 +49,9 @@ Build everything:
 ./build-all.sh
 ```
 
-The script stages all builds and replaces `out/` only after every one
-has succeeded. The tree has two directories, one for executables and one
-for license notices:
+The script stages all builds and replaces `out/` only after every one has
+succeeded. Most utilities contribute only executables and license notices;
+git and OpenSSH also contribute runtime support files:
 
 ```text
 out/
@@ -67,6 +69,14 @@ out/
 │   ├── lzcat -> xz
 │   ├── lzma -> xz
 │   ├── nano
+│   ├── scp
+│   ├── sftp
+│   ├── ssh
+│   ├── ssh-add
+│   ├── ssh-agent
+│   ├── ssh-keygen
+│   ├── ssh-keyscan
+│   ├── sshd
 │   ├── tar
 │   ├── tmux
 │   ├── unrar
@@ -79,37 +89,55 @@ out/
 │   ├── zcat -> gzip
 │   ├── zstd
 │   └── zstdcat -> zstd
-└── licenses/
-    ├── 7zip/
-    ├── bzip2/
-    ├── c-ares/
-    ├── curl/
-    ├── expat/
-    ├── file/
-    ├── fil-c/
-    ├── git/
-    ├── gzip/
-    ├── libidn2/
-    ├── libpsl/
-    ├── libunistring/
-    ├── libevent/
-    ├── nano/
-    ├── ncurses/
-    ├── openssl/
-    ├── pcre2/
-    ├── tar/
-    ├── tmux/
-    ├── unrar/
-    ├── wget/
-    ├── xz/
-    ├── utf8proc/
-    ├── zlib/
-    └── zstd/
+├── etc/
+│   └── ssh/
+│       ├── moduli
+│       ├── ssh_config
+│       └── sshd_config
+├── libexec/
+│   ├── git-core/
+│   ├── sftp-server
+│   ├── ssh-keysign
+│   ├── ssh-pkcs11-helper
+│   ├── ssh-sk-helper
+│   ├── sshd-auth
+│   └── sshd-session
+├── licenses/
+│   ├── 7zip/
+│   ├── bzip2/
+│   ├── c-ares/
+│   ├── curl/
+│   ├── expat/
+│   ├── file/
+│   ├── fil-c/
+│   ├── git/
+│   ├── gzip/
+│   ├── libidn2/
+│   ├── libpsl/
+│   ├── libunistring/
+│   ├── libevent/
+│   ├── nano/
+│   ├── ncurses/
+│   ├── openssh/
+│   ├── openssl/
+│   ├── pcre2/
+│   ├── tar/
+│   ├── tmux/
+│   ├── unrar/
+│   ├── wget/
+│   ├── xz/
+│   ├── utf8proc/
+│   ├── zlib/
+│   └── zstd/
+├── share/
+│   └── man/
+└── var/
+    └── empty/
 ```
 
 The executables are native x86-64 or ARM64 static PIEs, according to the
-selected build platform, and have no ELF program interpreter. They can run
-directly from `out/`:
+selected build platform, and have no ELF program interpreter. The commands
+without compiled-in helper paths can run directly from `out/`:
 
 ```sh
 ./out/bin/7z t archive.7z
@@ -124,6 +152,7 @@ directly from `out/`:
 ./out/bin/nano notes.txt
 ./out/bin/tmux new-session
 ./out/bin/git clone https://github.com/git/git.git
+./out/bin/ssh-keygen -t ed25519
 ```
 
 curl and wget both verify certificates against
@@ -142,6 +171,40 @@ unpacked; copying the whole `out/` tree keeps the two together, while moving
 `bin/git` on its own leaves it unable to find them. It verifies HTTPS
 certificates against the same platform bundle curl and wget use, and points
 elsewhere with `http.sslCAInfo` or `GIT_SSL_CAINFO`.
+
+OpenSSH has compiled-in absolute paths. `sshd` starts `sshd-session`,
+`sshd-auth`, and `sftp-server` from `/libexec`, reads `/etc/ssh`, and chroots
+its preauthentication child to `/var/empty`. `scp` and `sftp` start
+`/bin/ssh`; run either from an unpacked tree with `-S "$PWD/out/bin/ssh"`.
+The other five OpenSSH client commands run standalone.
+
+Install the full OpenSSH tree at `/` in an isolated root filesystem before
+starting the server. Do not merge it casually into a distribution host: on a
+usrmerged system `/bin` is `/usr/bin`, so this tree replaces the distribution's
+OpenSSH programs and `/etc/ssh` configuration. The host must create the
+dedicated account and host keys itself; the artifact deliberately contains
+neither an account database nor private keys:
+
+```sh
+groupadd --system sshd
+useradd --system --gid sshd --home-dir /var/empty \
+  --shell /usr/sbin/nologin --comment 'sshd privsep' sshd
+chown root:root /var/empty
+chmod 0755 /var/empty
+ssh-keygen -A
+sshd -t
+```
+
+The per-utility tar artifact preserves root ownership and the setuid-root mode
+of `/libexec/ssh-keysign`. A local `build-all.sh` run deliberately leaves the
+helper at mode `0711`, because its `out/` files belong to the unprivileged user
+that ran the build. After copying that tree as root, make the installed OpenSSH
+files root-owned and restore `ssh-keysign` to mode `4711` before running
+`sshd -t`.
+
+The `sshd` account must stay locked, own no files, and not be shared with any
+other service. `sshd -t` fails closed if that account is absent or `/var/empty`
+is not root-owned and protected from group/world writes.
 
 nano carries a set of common terminal descriptions compiled into it, so it
 drives a terminal with no terminfo database on disk. Its optional runtime data
@@ -211,6 +274,22 @@ existing destination, so old files may remain. `build-all.sh` avoids that
 ambiguity by staging every build and replacing `out/` transactionally.
 Use `--platform linux/arm64` in the command above for an ARM64 artifact.
 
+OpenSSH must use the tar exporter: Docker's local exporter strips the setuid
+bit from `ssh-keysign`. Extract as root with permissions preserved:
+
+```sh
+docker build \
+  --platform linux/amd64 \
+  --target artifact \
+  --output type=tar,dest=openssh-server.tar \
+  ./openssh-server
+mkdir openssh-server-out
+tar -xpf openssh-server.tar -C openssh-server-out
+```
+
+An arm64 OpenSSH build must run on a native arm64 builder. QEMU user-mode
+emulation does not implement the seccomp operation exercised by its test suite.
+
 wget is the one exception to a plain `docker build`. Its HTTPS test suite,
 which gates the build, resolves a fixed hostname that the musl-built client can
 only reach through `/etc/hosts`, and a Dockerfile cannot write `/etc/hosts`
@@ -236,8 +315,10 @@ docker run --rm -i filc-zstd -dc < file.zst > file
 ```
 
 These images have no shell, package manager, or dynamic loader. They contain
-the selected utility, command aliases, and license notices. The curl image has
-no CA bundle either, so HTTPS needs one supplied:
+the selected utility, command aliases, and license notices. The OpenSSH image
+is a root-filesystem payload rather than a runnable server because it has no
+accounts or host keys. The curl image has no CA bundle either, so HTTPS needs
+one supplied:
 
 ```sh
 docker run --rm -v /etc/ssl/certs/ca-certificates.crt:/ca.pem:ro \
@@ -281,7 +362,9 @@ filc safety error: cannot write pointer with ptr >= upper.
 
 The one thing stripping does cost is the `alignment` stage in `tests/`, which
 reads DWARF. Run it against an unstripped build, `--target build`, rather than
-against `out/`; it reports that it could not scan rather than passing.
+against `out/`; it reports that it could not scan rather than passing. OpenSSH
+runs that scan over all 14 unstripped executables inside its Dockerfile before
+the debug sections are removed.
 
 ## Robustness testing
 
@@ -304,6 +387,7 @@ delicate, and every one of them runs against the Fil-C binary.
 | unRAR | **none ships** | — |
 | GNU nano | **none ships** | pseudo-terminal edit-and-save |
 | git | 1046 files | all pass, 6 cases skipped |
+| OpenSSH | `make tests`: 97 functional cases, unit/file/compatibility tests | 87 functional pass, 10 skip; PTY, password, and hostbased pass separately |
 
 Nothing needed to be excluded or marked expected-to-fail: Fil-C causes no
 failures in any of them. Skipped cases are features these builds do not enable,
@@ -319,6 +403,26 @@ two compare ISO-2022-JP byte for byte, where musl re-emits the shift sequence
 around every character rather than holding it across a run. Both encodings are
 valid and decode to the same text. The other forty-nine assertions in those
 three files run, and they are the ones that test the encoding machinery.
+
+OpenSSH's ten are named individually, and the build asserts all 97 functional
+tests still exist and the exact 87/10 main-suite split. Its PTY test is rerun
+with a workaround scoped to an upstream shell-pattern portability bug.
+Password authentication is rerun with a throwaway yescrypt password and
+succeeds; hostbased authentication is rerun after installation and drives the
+shipped `ssh-keysign`. An unprivileged artifact-only client then fails with the
+setuid bit removed and succeeds after mode `4711` is restored, proving the
+helper's root transition rather than only its executable path. Those overrides
+are isolated so they cannot alter the other 87 cases. A live preauthentication
+connection also verifies that every
+execution-capable Fil-C task has no-new-privileges and the seccomp filter.
+Fil-C 0.683 keeps only its original, fully signal-blocked thread-group leader
+outside that filter in a permanent `pause()` loop to preserve `/proc/self`;
+the build asserts it is the sole exception. The remaining skips need an
+external DNSSEC fixture, ptrace tooling and a non-root harness, a PAM or
+BSD-auth keyboard-interactive backend, or PKCS#11 provider loading. Seven
+third-party interoperability scripts and one extra PKCS#11 script are also
+dispatched; their exact expected self-skips are asserted, so an unplanned
+self-skip fails the build.
 
 nano's release ships no test suite and the program has no batch mode, so its
 gate is to drive the real binary through a pseudo-terminal: type a line, save
@@ -602,6 +706,7 @@ than content-addressed image digests.
 | tmux tests (git tag) | 3.7b | `156dc43dcbc7f06e35e1fae3118c44d77a370c46676b34b82bbafc4e608d8130` |
 | libevent source | 2.1.13 | `f7e9383b8c0baa81b687e5b5eecc01beefaf1b19b64151d95ed61647fe7a315c` |
 | utf8proc source | 2.11.3 | `abfed50b6d4da51345713661370290f4f4747263ee73dc90356299dfc7990c78` |
+| OpenSSH portable source | 10.5p1 | `d44d28a839ea9daf969cc69150fde59910b2b39361dad81a3bd6cbd19218db11` |
 
 The Dockerfile frontend, Ubuntu base image, and Ubuntu packages installed in
 the builder are not pinned to immutable digests or a snapshot repository. They
@@ -647,6 +752,23 @@ RAR compression algorithm. Review `out/licenses/` before redistribution.
   left off: it needs GPGME to verify signatures, and GPGME is not among the
   libraries ported to Fil-C. NLS is also off, as it is for curl. wget shares
   curl's no-assembly OpenSSL and the throughput and side-channel caveats above.
+- OpenSSH is built without PKCS#11 token providers or FIDO/security-key
+  providers because those paths load host shared objects that a static Fil-C
+  process cannot use. PAM, Kerberos, and BSD authentication are also absent.
+  Password authentication, including yescrypt hashes, works through the system
+  account database. The default configuration still spells
+  `KbdInteractiveAuthentication yes`, but no keyboard-interactive backend is
+  compiled in, so that method is inert. OpenSSH shares curl's no-assembly
+  OpenSSL and the throughput and side-channel caveats above. Fil-C 0.683 cannot
+  lower the overflow traps from OpenSSH's `-ftrapv` hardening flag, so this
+  build uses `-fwrapv`: signed overflow is defined to wrap instead of aborting.
+  Fil-C still checks every memory access, but a non-memory overflow logic bug
+  continues with the wrapped value rather than failing immediately. On
+  AArch64, sntrup761 uses cryptoint's portable C because Fil-C 0.683 cannot
+  lower its AArch64 inline assembly; sntrup and ML-KEM remain enabled.
+  Cryptoint intends this fallback to resist timing-changing optimization but
+  does not guarantee constant-time execution, and its Fil-C/AArch64 machine
+  code has not been side-channel audited.
 - tmux is built with sixel image support and utf8proc, which replaces its
   built-in character-width tables with fuller Unicode ones. systemd integration
   is left off: it would link libsystemd and defeat a self-contained static
@@ -761,6 +883,10 @@ recovery.
 ├── nano/
 │   ├── Dockerfile
 │   └── smoke.c
+├── openssh-server/
+│   ├── Dockerfile
+│   ├── check-alignment.pl
+│   └── patches/
 ├── tar/
 │   ├── Dockerfile
 │   └── patches/
@@ -1107,6 +1233,24 @@ the shared library too. The upstream reference build, `build_tmux.sh` in the
 Fil-C tree, is dynamic and installs into a prefix that already holds ncurses
 and libevent, so the static link and the terminfo question are this build's own
 work rather than something inherited from it.
+
+OpenSSH locks Fil-C's collector and allocator threads before installing its
+preauthentication seccomp filter, then allows the runtime's `sched_yield` and
+`MAP_NORESERVE` use. Violations kill the whole process because leaving other
+runtime-managed threads alive is unsafe. Its second patch routes process-title
+updates through `zsetproctitle`; Fil-C owns the original `argv` storage, so
+OpenSSH's usual overwrite-in-place implementation is unavailable. The Fil-C
+0.683 aarch64 release also leaves its kernel-UAPI `asm` include symlink dangling
+on Debian multiarch systems; the build retargets it to the architecture-specific
+directory and compiles a seccomp/tun header probe before building dependencies.
+Finally, Fil-C 0.683 misclassifies a byte-aligned libcrux aggregate in the
+aarch64 calling convention. A Fil-C/AArch64-only alignment attribute works
+around that compiler bug without disabling OpenSSH's ML-DSA or ML-KEM support;
+a static layout assertion and native cryptographic tests guard the workaround.
+The generated sntrup761 cryptoint code has a separate AArch64 assembly path
+that Fil-C 0.683 cannot lower. A fourth patch selects cryptoint's portable C
+fallbacks only on Fil-C/AArch64; sntrup761x25519 remains enabled, while x86-64
+and non-Fil-C AArch64 builds retain their assembly paths.
 
 ### Updating a dependency
 
