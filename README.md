@@ -1192,6 +1192,10 @@ OpenSSH's usual overwrite-in-place implementation is unavailable. The Fil-C
 0.683 aarch64 release also leaves its kernel-UAPI `asm` include symlink dangling
 on Debian multiarch systems; the build retargets it to the architecture-specific
 directory and compiles a seccomp/tun header probe before building dependencies.
+Finally, Fil-C 0.683 misclassifies a byte-aligned libcrux aggregate in the
+aarch64 calling convention. A Fil-C-only alignment attribute works around that
+compiler bug without disabling OpenSSH's ML-DSA or ML-KEM support; a static
+layout assertion and native cryptographic tests guard the workaround.
 
 ### Updating a dependency
 

@@ -148,19 +148,23 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/openssh.tar.gz \
     && tar --strip-components=1 -xzf /tmp/openssh.tar.gz \
     && rm /tmp/openssh.tar.gz
 
-# Two patches carry over the functional changes from the OpenSSH 10.3p1 port in
-# Fil-C 0.683, rebased onto pristine 10.5p1 and gated on __FILC__ so an unpatched
-# build keeps upstream behaviour. The first teaches the seccomp sandbox about
+# Three patches adapt pristine OpenSSH 10.5p1 to Fil-C 0.683 and are gated on
+# __FILC__ so an unpatched build keeps upstream behaviour. The first carries
+# over the Fil-C 10.3p1 port's seccomp changes and teaches the sandbox about
 # the runtime's threads: it locks them before the filter is installed, allows
 # the sched_yield and MAP_NORESERVE mmap they issue in the sandboxed child, and
 # makes violations kill the process rather than one thread of it. This rebase
 # adds the __FILC__ gates so non-Fil-C builds retain upstream behavior.
 # The second routes setproctitle through the runtime, because under Fil-C the
 # argv area belongs to it and the classic copy-over-argv path is unavailable.
+# The third aligns one generated libcrux Result payload to work around an
+# aarch64 aggregate-lowering bug fixed after 0.683 in Fil-C commit e0ded6df4296.
 COPY patches/0001-prepare-seccomp-sandbox-for-fil-c.patch /tmp/openssh-filc-sandbox.patch
 COPY patches/0002-report-process-title-through-fil-c.patch /tmp/openssh-filc-proctitle.patch
+COPY patches/0003-align-libcrux-result-for-fil-c.patch /tmp/openssh-filc-libcrux.patch
 RUN patch --batch --forward -p1 < /tmp/openssh-filc-sandbox.patch \
-    && patch --batch --forward -p1 < /tmp/openssh-filc-proctitle.patch
+    && patch --batch --forward -p1 < /tmp/openssh-filc-proctitle.patch \
+    && patch --batch --forward -p1 < /tmp/openssh-filc-libcrux.patch
 
 # --prefix=/ with explicit bin, libexec and configuration directories puts the
 # user-facing commands in /bin and the privilege-separation helpers
@@ -203,6 +207,13 @@ RUN CFLAGS="-O2 -g -fwrapv" LDFLAGS="-static -L/deps/lib" \
         --with-privsep-user=sshd \
         --disable-security-key --disable-pkcs11 \
     && make -j"$(nproc)"
+
+# Fail at the affected operation instead of letting a missing fixture host key
+# surface later as an unrelated connection or multiplexing timeout.
+RUN ./ssh-keygen -q -t mldsa44-ed25519 -N '' -f /tmp/mldsa44-key \
+    && test -s /tmp/mldsa44-key \
+    && test -s /tmp/mldsa44-key.pub \
+    && rm -f /tmp/mldsa44-key /tmp/mldsa44-key.pub
 
 # The configure results that carry the security story are asserted here
 # rather than taken on faith, because they are invisible in the binaries:
