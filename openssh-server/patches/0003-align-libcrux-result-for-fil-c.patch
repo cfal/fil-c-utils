@@ -9,9 +9,9 @@ eight bytes. Returning this valid byte-aligned Result therefore emits an
 eight-byte-aligned pointer load and panics at runtime. Fil-C fixes the compiler
 bug in e0ded6df4296a6b1170f19e5faedaa7c08b90a02.
 
-Align only this payload for Fil-C releases that predate the compiler fix, and
-assert the layout on every Fil-C build so generated-source drift fails closed.
-Other compilers retain the generated layout.
+Align only this payload for AArch64 Fil-C releases that predate the compiler
+fix, and assert the layout on those builds so generated-source drift fails
+closed. Other targets and compilers retain the generated layout.
 
 --- a/libcrux_internal.h
 +++ b/libcrux_internal.h
@@ -19,14 +19,14 @@ Other compilers retain the generated layout.
      Eurydice_array_u8x8 case_Ok;
      core_array_TryFromSliceError case_Err;
    }
-+#ifdef __FILC__
++#if defined(__FILC__) && defined(__aarch64__)
 +  __attribute__((aligned(8)))
 +#endif
    val;
  }
  core_result_Result_8e;
  
-+#ifdef __FILC__
++#if defined(__FILC__) && defined(__aarch64__)
 +_Static_assert(__builtin_offsetof(core_result_Result_8e, val) == 8,
 +    "libcrux Result payload must be 8-byte aligned");
 +#endif
