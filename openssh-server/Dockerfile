@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
-ARG FILC_VERSION=0.683
-ARG FILC_X86_64_SHA256=0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6
-ARG FILC_AARCH64_SHA256=405bcd4ea69bed4542581cd917581b2a34ae8e363cc5c76b701f27585de60e66
+ARG FILC_VERSION=0.684
+ARG FILC_X86_64_SHA256=eefb594bcbc1261a18dfa8b50041674635f53df2b5fe067915b5652adaed4e3f
+ARG FILC_AARCH64_SHA256=564813b819a6e73879bdd993e2176b38ccbd5c5219e5adcbe1589e874c860666
 ARG ZLIB_VERSION=1.3.2
 ARG ZLIB_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
 ARG OPENSSL_VERSION=4.0.1
@@ -61,7 +61,7 @@ RUN apt-get update \
 RUN sed -i 's/^# *en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen \
     && locale-gen
 
-# Fil-C 0.683's generated setup.sh checks x86_64's multiarch path on every
+# Fil-C 0.684's generated setup.sh checks x86_64's multiarch path on every
 # architecture. Its fallback leaves os-include/asm dangling on aarch64, hiding
 # the seccomp and tun UAPI behind a missing asm/types.h. Use the architecture-
 # specific path, as Fil-C's own build_os_include.sh does.
@@ -148,19 +148,20 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/openssh.tar.gz \
     && tar --strip-components=1 -xzf /tmp/openssh.tar.gz \
     && rm /tmp/openssh.tar.gz
 
-# Four patches adapt pristine OpenSSH 10.5p1 to Fil-C 0.683 and are gated on
+# Four patches adapt pristine OpenSSH 10.5p1 to Fil-C 0.684 and are gated on
 # __FILC__ so an unpatched build keeps upstream behaviour. The first carries
-# over the Fil-C 10.3p1 port's seccomp changes and teaches the sandbox about
-# the runtime's threads: it locks them before the filter is installed, allows
-# the sched_yield and MAP_NORESERVE mmap they issue in the sandboxed child, and
-# makes violations kill the process rather than one thread of it. This rebase
-# adds the __FILC__ gates so non-Fil-C builds retain upstream behavior.
+# over the Fil-C 0.684 OpenSSH port's seccomp changes and teaches the sandbox
+# about the runtime's threads: it locks them before the filter is installed,
+# allows the sched_yield and MAP_NORESERVE mmap they issue in the sandboxed
+# child, and makes violations kill the process rather than one thread of it.
+# This variant gates those changes on __FILC__ so non-Fil-C builds retain
+# upstream behavior.
 # The second routes setproctitle through the runtime, because under Fil-C the
 # argv area belongs to it and the classic copy-over-argv path is unavailable.
 # The third aligns one generated libcrux Result payload to work around an
-# aarch64 aggregate-lowering bug fixed after 0.683 in Fil-C commit e0ded6df4296.
+# aarch64 aggregate-lowering bug fixed after 0.684 in Fil-C commit e0ded6df4296.
 # The fourth makes Fil-C/AArch64 select sntrup cryptoint's portable C fallbacks,
-# because 0.683 cannot lower the generated AArch64 inline assembly.
+# because 0.684 cannot lower the generated AArch64 inline assembly.
 COPY patches/0001-prepare-seccomp-sandbox-for-fil-c.patch /tmp/openssh-filc-sandbox.patch
 COPY patches/0002-report-process-title-through-fil-c.patch /tmp/openssh-filc-proctitle.patch
 COPY patches/0003-align-libcrux-result-for-fil-c.patch /tmp/openssh-filc-libcrux.patch
@@ -200,7 +201,7 @@ RUN patch --batch --forward -p1 < /tmp/openssh-filc-sandbox.patch \
 # PAM, libedit, Kerberos and audit are all opt-in upstream and stay off, so
 # nothing outside zlib and OpenSSL reaches the link.
 #
-# OpenSSH's hardening probe enables -ftrapv, but Fil-C 0.683 accepts the probe
+# OpenSSH's hardening probe enables -ftrapv, but Fil-C 0.684 accepts the probe
 # while leaving its llvm.ubsantrap overflow paths as unsupported-intrinsic
 # panics. Suppress only that false-positive probe and use -fwrapv so signed
 # overflow is defined rather than optimizer-dependent. This gives up upstream's
@@ -595,7 +596,7 @@ RUN set -euo pipefail; \
 # seccomp filter and no-new-privileges state on every execution-capable Fil-C
 # task, observes a real process title, rejects an unauthorized key, proves the
 # setuid ssh-keysign transition from an unprivileged client, survives SIGHUP,
-# and shuts down cleanly. Fil-C 0.683's musl startup keeps the original thread-
+# and shuts down cleanly. Fil-C 0.684's musl startup keeps the original thread-
 # group leader signal-blocked in an infinite pause solely to preserve
 # /proc/self; it never enters Fil-C or application code. The task checks that
 # exact leader as the sole exception, including the mask with all blockable

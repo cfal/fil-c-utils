@@ -1,7 +1,7 @@
 From: fil-c-utils maintainers
 Subject: [PATCH] Use portable sntrup cryptoint on Fil-C AArch64
 
-Fil-C 0.683 supports safe inline assembly only on x86-64. The generated
+Fil-C 0.684 supports safe inline assembly only on x86-64. The generated
 cryptoint code otherwise selects its AArch64 assembly because Fil-C presents
 the normal GNU-compatible target macros, leaving sntrup761x25519 key exchange
 to panic when it reaches the first instruction.
@@ -19,7 +19,7 @@ the resulting Fil-C AArch64 machine code is not claimed to be constant-time.
 -	#  - remove unnecessary defines and externs.
 -	sed -e "/#include/d" \
 +	#  - remove unnecessary defines and externs.
-+	#  - use portable cryptoint on Fil-C AArch64: Fil-C 0.683 cannot lower
++	#  - use portable cryptoint on Fil-C AArch64: Fil-C 0.684 cannot lower
 +	#    AArch64 inline assembly.
 +	sed -e "/#include/d" \
 +	    -e '/^#elif defined(__GNUC__) && defined(__aarch64__)$/s/$/ \&\& !defined(__FILC__)/' \
