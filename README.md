@@ -415,7 +415,7 @@ helper's root transition rather than only its executable path. Those overrides
 are isolated so they cannot alter the other 87 cases. A live preauthentication
 connection also verifies that every
 execution-capable Fil-C task has no-new-privileges and the seccomp filter.
-Fil-C 0.683 keeps only its original, fully signal-blocked thread-group leader
+Fil-C 0.684 keeps only its original, fully signal-blocked thread-group leader
 outside that filter in a permanent `pause()` loop to preserve `/proc/self`;
 the build asserts it is the sole exception. The remaining skips need an
 external DNSSEC fixture, ptrace tooling and a non-root harness, a PAM or
@@ -681,8 +681,8 @@ than content-addressed image digests.
 
 | Component | Version | SHA-256 |
 | --- | --- | --- |
-| Fil-C (x86_64) | 0.683 | `0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6` |
-| Fil-C (aarch64) | 0.683 | `405bcd4ea69bed4542581cd917581b2a34ae8e363cc5c76b701f27585de60e66` |
+| Fil-C (x86_64) | 0.684 | `eefb594bcbc1261a18dfa8b50041674635f53df2b5fe067915b5652adaed4e3f` |
+| Fil-C (aarch64) | 0.684 | `564813b819a6e73879bdd993e2176b38ccbd5c5219e5adcbe1589e874c860666` |
 | 7-Zip source | 26.02 | `cf967c98bca02a4b8b16375f441825a8e141362f14be1969bbec8e1ca0bff9dd` |
 | unRAR source | 7.2.7 | `01d903a7dcf413cb2925696d7796e48e38d471f79bfe7ef3ad2aebf6c12dbefd` |
 | GNU tar source | 1.35 | `4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16` |
@@ -760,12 +760,12 @@ RAR compression algorithm. Review `out/licenses/` before redistribution.
   account database. The default configuration still spells
   `KbdInteractiveAuthentication yes`, but no keyboard-interactive backend is
   compiled in, so that method is inert. OpenSSH shares curl's no-assembly
-  OpenSSL and the throughput and side-channel caveats above. Fil-C 0.683 cannot
+  OpenSSL and the throughput and side-channel caveats above. Fil-C 0.684 cannot
   lower the overflow traps from OpenSSH's `-ftrapv` hardening flag, so this
   build uses `-fwrapv`: signed overflow is defined to wrap instead of aborting.
   Fil-C still checks every memory access, but a non-memory overflow logic bug
   continues with the wrapped value rather than failing immediately. On
-  AArch64, sntrup761 uses cryptoint's portable C because Fil-C 0.683 cannot
+  AArch64, sntrup761 uses cryptoint's portable C because Fil-C 0.684 cannot
   lower its AArch64 inline assembly; sntrup and ML-KEM remain enabled.
   Cryptoint intends this fallback to resist timing-changing optimization but
   does not guarantee constant-time execution, and its Fil-C/AArch64 machine
@@ -1062,7 +1062,7 @@ versa.
 7-Zip's x86 feature detection normally uses inline CPUID and XGETBV assembly.
 Its patch substitutes Fil-C's supported intrinsic interfaces on x86 only; ARM64
 keeps 7-Zip's native architecture paths. One of those paths uses the inline ARM
-`rbit` instruction in the Deflate decoder, which Fil-C 0.683 cannot lower. An
+`rbit` instruction in the Deflate decoder, which Fil-C 0.684 cannot lower. An
 ARM-only patch selects 7-Zip's existing bit-reversal table instead, and the
 Dockerfile gates both Deflate-in-7z and ZIP decoding. The build also defines
 `Z7_NO_LARGE_PAGES`; 7-Zip's 2 MiB alignment request exceeds Fil-C's supported
@@ -1175,7 +1175,7 @@ existing portable C implementation.
 
 On ARM64, `ZSTD_NO_INTRINSICS` also selects Zstandard's portable SWAR row
 matcher. Its NEON matcher uses structured `ld2` and `ld4` loads that Fil-C
-0.683 compiles into unhandled-intrinsic traps. The flag is architecture-scoped,
+0.684 compiles into unhandled-intrinsic traps. The flag is architecture-scoped,
 so x86 keeps its supported SIMD matcher.
 
 Zstandard's optimal parser also stores 12-byte repcode arrays in 28-byte table
@@ -1241,15 +1241,15 @@ preauthentication seccomp filter, then allows the runtime's `sched_yield` and
 runtime-managed threads alive is unsafe. Its second patch routes process-title
 updates through `zsetproctitle`; Fil-C owns the original `argv` storage, so
 OpenSSH's usual overwrite-in-place implementation is unavailable. The Fil-C
-0.683 aarch64 release also leaves its kernel-UAPI `asm` include symlink dangling
+0.684 aarch64 release also leaves its kernel-UAPI `asm` include symlink dangling
 on Debian multiarch systems; the build retargets it to the architecture-specific
 directory and compiles a seccomp/tun header probe before building dependencies.
-Finally, Fil-C 0.683 misclassifies a byte-aligned libcrux aggregate in the
+Finally, Fil-C 0.684 misclassifies a byte-aligned libcrux aggregate in the
 aarch64 calling convention. A Fil-C/AArch64-only alignment attribute works
 around that compiler bug without disabling OpenSSH's ML-DSA or ML-KEM support;
 a static layout assertion and native cryptographic tests guard the workaround.
 The generated sntrup761 cryptoint code has a separate AArch64 assembly path
-that Fil-C 0.683 cannot lower. A fourth patch selects cryptoint's portable C
+that Fil-C 0.684 cannot lower. A fourth patch selects cryptoint's portable C
 fallbacks only on Fil-C/AArch64; sntrup761x25519 remains enabled, while x86-64
 and non-Fil-C AArch64 builds retain their assembly paths.
 

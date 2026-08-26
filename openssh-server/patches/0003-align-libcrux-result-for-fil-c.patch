@@ -2,7 +2,7 @@ From: fil-c-utils maintainers
 Subject: [PATCH] Align the libcrux Result payload for Fil-C
 
 OpenSSH 10.5p1's generated libcrux code returns an eight-byte array from a
-tagged Result whose payload begins at offset one. Fil-C 0.683's aarch64 calling
+tagged Result whose payload begins at offset one. Fil-C 0.684's aarch64 calling
 convention lowering incorrectly represents every aggregate of at most sixteen
 bytes as capability pointers, even when its natural alignment is less than
 eight bytes. Returning this valid byte-aligned Result therefore emits an

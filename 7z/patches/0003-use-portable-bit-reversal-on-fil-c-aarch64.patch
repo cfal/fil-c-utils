@@ -2,7 +2,7 @@ From: fil-c-utils maintainers
 Subject: [PATCH] Use portable bit reversal under Fil-C on AArch64
 
 7-Zip selects an inline ARM `rbit` instruction for Deflate's least-significant-
-bit-first decoder. Fil-C 0.683 does not support inline assembly on AArch64 and
+bit-first decoder. Fil-C 0.684 does not support inline assembly on AArch64 and
 turns that instruction into a run-time trap. Select 7-Zip's existing lookup
 table implementation under Fil-C instead.
 

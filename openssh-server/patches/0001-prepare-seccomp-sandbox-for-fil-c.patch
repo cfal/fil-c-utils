@@ -2,8 +2,8 @@ From: fil-c-utils maintainers
 Subject: [PATCH] Prepare the seccomp sandbox for the Fil-C runtime
 
 The preauth child runs the Fil-C runtime after fork, and the upstream filter
-was written for a plain single-threaded libc. The OpenSSH 10.3p1 port that
-ships in Fil-C 0.683 makes these adjustments:
+was written for a plain single-threaded libc. The OpenSSH 10.5p1 port that
+ships in Fil-C 0.684 makes these adjustments:
 
   - zlock_runtime_threads() before the filter is installed. It is the last
     chance the runtime has to create threads, and this tells it neither to
