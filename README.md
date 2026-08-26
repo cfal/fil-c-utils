@@ -692,18 +692,19 @@ than content-addressed image digests.
 | Zstandard source | 1.5.7 | `eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3` |
 | curl source | 8.19.0 | `4eb41489790d19e190d7ac7e18e82857cdd68af8f4e66b292ced562d333f11df` |
 | GNU Wget source | 1.25.0 | `766e48423e79359ea31e41db9e5c289675947a7fcf2efdcedb726ac9d0da3784` |
-| OpenSSL source | 3.5.7 | `a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8` |
+| OpenSSL source (curl, git, OpenSSH) | 4.0.2 | `736b467530f916737b7031310ccb21d8218c6229e61e8e160cd1d3458cd543a8` |
+| OpenSSL source (wget) | 3.6.4 | `9bffaa1ad1e07b354c21bd3324ec02fa15579f45a7d0494b3e74bc449b7333ef` |
 | zlib source | 1.3.1 | `9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23` |
 | libunistring source | 1.4.2 | `5b46e74377ed7409c5b75e7a96f95377b095623b689d8522620927964a41499c` |
 | libidn2 source | 2.3.8 | `f557911bf6171621e1f72ff35f5b1825bb35b52ed45325dcdee931e5d3c0787a` |
-| libpsl source | 0.23.0 | `f39b9631b3d369a21259ea4654f8875c0ec6995ce9551c0eb5d423e4c011f911` |
+| libpsl source | 0.23.3 | `93941f85a1e7bd593fa94f299233cb5dfc91cd144fd9a78a6ceb75001c5b03be` |
 | PCRE2 source | 10.47 | `c08ae2388ef333e8403e670ad70c0a11f1eed021fd88308d7e02f596fcd9dc16` |
 | c-ares source | 1.34.8 | `c222b6d681096f9444d2c4863d2c1174019e27cacca0a4a5c114d36dd7d7bf78` |
 | GNU nano source | 9.1 | `5f47764274cb7532349ce0aa20ec10f1e8e851a6e9fa3eb66812c43d196db042` |
 | ncurses source | 6.6 | `355b4cbbed880b0381a04c46617b7656e362585d52e9cf84a67e2009b749ff11` |
 | file source | 5.46 | `c9cc77c7c560c543135edc555af609d5619dbef011997e988ce40a3d75d86088` |
-| tmux source | 3.7b | `87f2e99e3b685973f2ca002ffd6ed7e51a5744f7009daae5a15670b6d532db96` |
-| tmux tests (git tag) | 3.7b | `156dc43dcbc7f06e35e1fae3118c44d77a370c46676b34b82bbafc4e608d8130` |
+| tmux source | 3.7c | `7c60cae9a0e25288e2e24750aafc9e8800fc7fd4555e447e1b29ee4201cfb3bf` |
+| tmux tests (git tag) | 3.7c | `5e7b0f533b66e5633e2b72a9d483f9534a343ab7011eb2621b6309dfba553daa` |
 | libevent source | 2.1.13 | `f7e9383b8c0baa81b687e5b5eecc01beefaf1b19b64151d95ed61647fe7a315c` |
 | utf8proc source | 2.11.3 | `abfed50b6d4da51345713661370290f4f4747263ee73dc90356299dfc7990c78` |
 | OpenSSH portable source | 10.5p1 | `d44d28a839ea9daf969cc69150fde59910b2b39361dad81a3bd6cbd19218db11` |
