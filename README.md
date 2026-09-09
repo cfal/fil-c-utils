@@ -683,22 +683,22 @@ than content-addressed image digests.
 | --- | --- | --- |
 | Fil-C (x86_64) | 0.684 | `eefb594bcbc1261a18dfa8b50041674635f53df2b5fe067915b5652adaed4e3f` |
 | Fil-C (aarch64) | 0.684 | `564813b819a6e73879bdd993e2176b38ccbd5c5219e5adcbe1589e874c860666` |
-| 7-Zip source | 26.02 | `cf967c98bca02a4b8b16375f441825a8e141362f14be1969bbec8e1ca0bff9dd` |
+| 7-Zip source | 26.03 | `9cbde5099c6deb73691b0579063da5827522ccbbcba3f0020fd04e8c8c16c0d4` |
 | unRAR source | 7.2.7 | `01d903a7dcf413cb2925696d7796e48e38d471f79bfe7ef3ad2aebf6c12dbefd` |
 | GNU tar source | 1.35 | `4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16` |
 | GNU gzip source | 1.14 | `01a7b881bd220bfdf615f97b8718f80bdfd3f6add385b993dcf6efd14e8c0ac6` |
 | bzip2 source | 1.0.8 | `ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269` |
 | XZ Utils source | 5.8.3 | `fff1ffcf2b0da84d308a14de513a1aa23d4e9aa3464d17e64b9714bfdd0bbfb6` |
 | Zstandard source | 1.5.7 | `eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3` |
-| curl source | 8.19.0 | `4eb41489790d19e190d7ac7e18e82857cdd68af8f4e66b292ced562d333f11df` |
+| curl source | 8.22.0 | `f7ef3ae8a22e521f289803fe93543eb64c329b58aa73a9e224dfd915a2a5f4f7` |
 | GNU Wget source | 1.25.0 | `766e48423e79359ea31e41db9e5c289675947a7fcf2efdcedb726ac9d0da3784` |
 | OpenSSL source (curl, git, OpenSSH) | 4.0.2 | `736b467530f916737b7031310ccb21d8218c6229e61e8e160cd1d3458cd543a8` |
 | OpenSSL source (wget) | 3.6.4 | `9bffaa1ad1e07b354c21bd3324ec02fa15579f45a7d0494b3e74bc449b7333ef` |
-| zlib source | 1.3.1 | `9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23` |
+| zlib source | 1.3.2 | `bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16` |
 | libunistring source | 1.4.2 | `5b46e74377ed7409c5b75e7a96f95377b095623b689d8522620927964a41499c` |
 | libidn2 source | 2.3.8 | `f557911bf6171621e1f72ff35f5b1825bb35b52ed45325dcdee931e5d3c0787a` |
 | libpsl source | 0.23.3 | `93941f85a1e7bd593fa94f299233cb5dfc91cd144fd9a78a6ceb75001c5b03be` |
-| PCRE2 source | 10.47 | `c08ae2388ef333e8403e670ad70c0a11f1eed021fd88308d7e02f596fcd9dc16` |
+| PCRE2 source | 10.48 | `ebcc25aadf2a51fa1fefa9b8bc9e7a79b3dae86870a0f1152a22e42befd46888` |
 | c-ares source | 1.34.8 | `c222b6d681096f9444d2c4863d2c1174019e27cacca0a4a5c114d36dd7d7bf78` |
 | GNU nano source | 9.1 | `5f47764274cb7532349ce0aa20ec10f1e8e851a6e9fa3eb66812c43d196db042` |
 | ncurses source | 6.6 | `355b4cbbed880b0381a04c46617b7656e362585d52e9cf84a67e2009b749ff11` |
@@ -707,6 +707,8 @@ than content-addressed image digests.
 | tmux tests (git tag) | 3.7c | `5e7b0f533b66e5633e2b72a9d483f9534a343ab7011eb2621b6309dfba553daa` |
 | libevent source | 2.1.13 | `f7e9383b8c0baa81b687e5b5eecc01beefaf1b19b64151d95ed61647fe7a315c` |
 | utf8proc source | 2.11.3 | `abfed50b6d4da51345713661370290f4f4747263ee73dc90356299dfc7990c78` |
+| Git source | 2.55.0 | `457fdb04dc8728e007d4688695e6912e6f680727920f2a40bf11eacc17505357` |
+| Expat source | 2.8.4 | `b8ece2437692dad44d851c4532723390a5a330990007706be9c8d2b90d294f36` |
 | OpenSSH portable source | 10.5p1 | `d44d28a839ea9daf969cc69150fde59910b2b39361dad81a3bd6cbd19218db11` |
 
 The Dockerfile frontend, Ubuntu base image, and Ubuntu packages installed in
@@ -980,11 +982,11 @@ curl       8.19.0     8.21.0     OUTDATED
 ```
 
 The `COMPONENTS` table is explicit rather than discovered from Dockerfile
-arguments. Every upstream has a different release source, so the registered
-sources are queried differently: GitHub releases for 7-Zip, XZ, Zstandard,
-curl, OpenSSL, and zlib; GNU listings for GNU projects; sourceware for bzip2;
-and rarlab for unRAR. A new maintained release pin needs a table entry and an
-upstream-specific lookup or it will not receive freshness reports.
+arguments. Every upstream has a different release source, so each registered
+component uses its project's authoritative release API or listing: GitHub,
+GNU, Sourceware, RARLab, or the OpenBSD CDN. A new maintained release pin needs
+a table entry and an upstream-specific lookup or it will not receive freshness
+reports.
 
 The check never stops at the first problem. A component whose upstream is
 unreachable, or whose listing has changed shape, is reported as an error and

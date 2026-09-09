@@ -7,12 +7,13 @@ HAVE_SCHED_YIELD fallback handles the spin wait instead.
 
 --- a/lib/easy_lock.h
 +++ b/lib/easy_lock.h
-@@ -68,7 +68,7 @@ static CURL_INLINE void curl_simple_lock_lock(curl_simple_lock *lock)
+@@ -70,8 +70,8 @@ static CURL_INLINE void curl_simple_lock_lock(curl_simple_lock *lock)
        /* Reduce load (not mandatory) */
  #ifdef HAVE_BUILTIN_IA32_PAUSE
        __builtin_ia32_pause();
 -#elif defined(__aarch64__)
 +#elif defined(__aarch64__) && !defined(__FILC__)
+       /* NOLINTNEXTLINE(portability-no-assembler) */
        __asm__ volatile("yield" ::: "memory");
  #elif defined(HAVE_SCHED_YIELD)
        sched_yield();
