@@ -681,8 +681,8 @@ than content-addressed image digests.
 
 | Component | Version | SHA-256 |
 | --- | --- | --- |
-| Fil-C (x86_64) | 0.684 | `eefb594bcbc1261a18dfa8b50041674635f53df2b5fe067915b5652adaed4e3f` |
-| Fil-C (aarch64) | 0.684 | `564813b819a6e73879bdd993e2176b38ccbd5c5219e5adcbe1589e874c860666` |
+| Fil-C (x86_64) | 0.685 | `d12bd30c33f18179a9355b32ea44ba61dcc0342c7d77d1ac2548852e64994727` |
+| Fil-C (aarch64) | 0.685 | `3f24d1dc84cf66422740b83e68d830669ff263dd0a7d1ea0a133d802f47681b0` |
 | 7-Zip source | 26.03 | `9cbde5099c6deb73691b0579063da5827522ccbbcba3f0020fd04e8c8c16c0d4` |
 | unRAR source | 7.2.7 | `01d903a7dcf413cb2925696d7796e48e38d471f79bfe7ef3ad2aebf6c12dbefd` |
 | GNU tar source | 1.35 | `4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16` |
