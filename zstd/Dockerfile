@@ -62,32 +62,10 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/zstd.tar.gz \
 COPY patches/0001-honor-ZSTD_DISABLE_ASM-in-ZSTD_selectAddr.patch /tmp/zstd-fil-c.patch
 RUN patch --batch --forward -p1 < /tmp/zstd-fil-c.patch
 
-COPY patches/0002-align-optimal-repcodes-on-fil-c-aarch64.patch /tmp/zstd-fil-c-arm.patch
-RUN patch --batch --forward -p1 < /tmp/zstd-fil-c-arm.patch
-
-COPY patches/0003-align-frame-parameters-on-fil-c-aarch64.patch /tmp/zstd-fil-c-arm-params.patch
-RUN patch --batch --forward -p1 < /tmp/zstd-fil-c-arm-params.patch
-
-COPY patches/0004-align-nested-dictionary-parameters-on-fil-c-aarch64.patch /tmp/zstd-fil-c-arm-dict.patch
-RUN patch --batch --forward -p1 < /tmp/zstd-fil-c-arm-dict.patch
-
-COPY patches/0005-align-legacy-dictionary-items-on-fil-c-aarch64.patch /tmp/zstd-fil-c-arm-items.patch
-RUN patch --batch --forward -p1 < /tmp/zstd-fil-c-arm-items.patch
-
-COPY patches/0006-align-raw-sequences-on-fil-c-aarch64.patch /tmp/zstd-fil-c-arm-sequences.patch
-RUN patch --batch --forward -p1 < /tmp/zstd-fil-c-arm-sequences.patch
-
-# Fil-C does not lower the structured NEON loads in Zstd's ARM row matcher and
-# leaves them as run-time traps. The upstream flag selects its SWAR matcher on
-# ARM only; x86 keeps the supported SIMD paths it already used.
-RUN cflags="-O2 -g" \
-    && if [ "${TARGETARCH}" = arm64 ]; then \
-        cflags="${cflags} -DZSTD_NO_INTRINSICS"; \
-    fi \
-    && make -j"$(nproc)" zstd \
+RUN make -j"$(nproc)" zstd \
         CC=/opt/filc/build/bin/clang \
         CXX=/opt/filc/build/bin/clang++ \
-        CFLAGS="${cflags}" \
+        CFLAGS="-O2 -g" \
         LDFLAGS="-static" \
         HAVE_ZLIB=0 \
         HAVE_LZMA=0 \
@@ -120,14 +98,10 @@ RUN binary=/src/programs/zstd \
 # far more of the program than a round-trip smoke test can, and every case runs
 # against the Fil-C binary.
 RUN set -e; \
-    cflags="-O2 -g"; \
-    if [ "${TARGETARCH}" = arm64 ]; then \
-        cflags="${cflags} -DZSTD_NO_INTRINSICS"; \
-    fi; \
     make check \
         CC=/opt/filc/build/bin/clang \
         CXX=/opt/filc/build/bin/clang++ \
-        CFLAGS="${cflags}" \
+        CFLAGS="-O2 -g" \
         LDFLAGS="-static" \
         HAVE_ZLIB=0 HAVE_LZMA=0 HAVE_LZ4=0 ZSTD_NO_ASM=1 \
         > /tmp/zstd-check.log 2>&1 || { tail -40 /tmp/zstd-check.log; exit 1; }; \
