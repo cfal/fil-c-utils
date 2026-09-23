@@ -380,7 +380,7 @@ delicate, and every one of them runs against the Fil-C binary.
 | GNU Wget | `tests/` + `testenv/`, 136 cases | 134 pass, 2 skip |
 | tmux | `regress/`, 35 cases (git only) | 35 pass |
 | gzip | 30 cases | 29 pass, 1 skip |
-| XZ Utils | 18 cases | 18 pass |
+| XZ Utils | 21 cases | 21 pass |
 | Zstandard | `playTests.sh` and fuzzers | all pass |
 | bzip2 | 3 sample round trips | pass |
 | 7-Zip | **none ships** | — |
@@ -684,11 +684,11 @@ than content-addressed image digests.
 | Fil-C (x86_64) | 0.684 | `eefb594bcbc1261a18dfa8b50041674635f53df2b5fe067915b5652adaed4e3f` |
 | Fil-C (aarch64) | 0.684 | `564813b819a6e73879bdd993e2176b38ccbd5c5219e5adcbe1589e874c860666` |
 | 7-Zip source | 26.03 | `9cbde5099c6deb73691b0579063da5827522ccbbcba3f0020fd04e8c8c16c0d4` |
-| unRAR source | 7.2.7 | `01d903a7dcf413cb2925696d7796e48e38d471f79bfe7ef3ad2aebf6c12dbefd` |
+| unRAR source | 7.3.1 | `634900842a3737d9cc15bbcc71d4c74cc713437e0bca296a573424fe5f2660ab` |
 | GNU tar source | 1.35 | `4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16` |
 | GNU gzip source | 1.14 | `01a7b881bd220bfdf615f97b8718f80bdfd3f6add385b993dcf6efd14e8c0ac6` |
 | bzip2 source | 1.0.8 | `ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269` |
-| XZ Utils source | 5.8.3 | `fff1ffcf2b0da84d308a14de513a1aa23d4e9aa3464d17e64b9714bfdd0bbfb6` |
+| XZ Utils source | 5.8.4 | `4ce24038fd4221e0d13bc1a2de7a4db56e90b92b3bf75321f6c14be73f65de4b` |
 | Zstandard source | 1.5.7 | `eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3` |
 | curl source | 8.22.0 | `f7ef3ae8a22e521f289803fe93543eb64c329b58aa73a9e224dfd915a2a5f4f7` |
 | GNU Wget source | 1.25.0 | `766e48423e79359ea31e41db9e5c289675947a7fcf2efdcedb726ac9d0da3784` |
@@ -708,7 +708,7 @@ than content-addressed image digests.
 | libevent source | 2.1.13 | `f7e9383b8c0baa81b687e5b5eecc01beefaf1b19b64151d95ed61647fe7a315c` |
 | utf8proc source | 2.11.3 | `abfed50b6d4da51345713661370290f4f4747263ee73dc90356299dfc7990c78` |
 | Git source | 2.55.0 | `457fdb04dc8728e007d4688695e6912e6f680727920f2a40bf11eacc17505357` |
-| Expat source | 2.8.4 | `b8ece2437692dad44d851c4532723390a5a330990007706be9c8d2b90d294f36` |
+| Expat source | 2.8.5 | `920dde485e15eda0cce8d2310b41d492c534e5e3d89ad407a0b4176dd2ff88fe` |
 | OpenSSH portable source | 10.5p1 | `d44d28a839ea9daf969cc69150fde59910b2b39361dad81a3bd6cbd19218db11` |
 
 The Dockerfile frontend, Ubuntu base image, and Ubuntu packages installed in
@@ -812,25 +812,13 @@ RAR compression algorithm. Review `out/licenses/` before redistribution.
 
 Allocation failure is not recoverable. Fil-C panics when it cannot satisfy an
 allocation, where an ordinary build would return `NULL` and let the program
-report an error and exit. A malformed archive that provokes a large allocation
-therefore aborts the process under a memory cap that a conventional build would
-survive. A corrupt 32-byte `.xz` index illustrates it:
+report an error and exit. A malformed input that provokes a large allocation
+can therefore abort under a memory cap that a conventional build would survive.
+Size container memory limits with that in mind, and treat an abort under a tight
+cap as a resource result rather than evidence of a memory-safety defect. The
+fuzz stage classifies it as `OOM` for that reason.
 
-| Address-space cap | Stock xz 5.8.3 | This build |
-| --- | --- | --- |
-| 4 GiB | `Cannot allocate memory`, exit 1 | Fil-C panic, exit 133 |
-| 8 GiB | `Compressed data is corrupt`, exit 1 | Fil-C panic, exit 133 |
-| 10 GiB | `Compressed data is corrupt`, exit 1 | `Compressed data is corrupt`, exit 1 |
-
-Both builds want several GiB to reject that file, which is an upstream property
-of xz 5.8.3 rather than something Fil-C introduces; 5.4.5 rejects it in under
-1 GiB. Fil-C adds roughly a quarter again on top. The difference that matters
-here is the failure mode: a panic instead of a clean diagnostic. Size the
-memory limit for a container running these utilities with that in mind, and
-treat an abort under a tight cap as a resource result rather than evidence of a
-memory-safety defect. The fuzz stage classifies it as `OOM` for that reason.
-
-The sharper form of this needs no memory limit at all. Fil-C will not create an
+A sharper form of this needs no memory limit at all. Fil-C will not create an
 object beyond a maximum size, and asks for one are refused with a panic rather
 than a recoverable failure. A corrupt archive whose header carries an
 unvalidated length reaches that ceiling directly. Fuzzing found one in 7-Zip's
@@ -843,8 +831,8 @@ resource header (`WimIn.cpp:312`); an 11 MB file asks for 1.88 PiB:
 | Exit | 2 | 133 |
 
 The unvalidated size field is an upstream weakness present in both builds. Only
-the outcome differs, and it differs the same way as the xz case: an ordinary
-build reports an error and exits, this one aborts. The fuzz stage reports these
+the outcome differs, as with the allocation failure above: an ordinary build
+reports an error and exits, this one aborts. The fuzz stage reports these
 as `HUGE`, separately from `OOM` and from real memory-safety failures, because
 all three read very differently in a summary table and only the last is a
 Fil-C-caught bug.
