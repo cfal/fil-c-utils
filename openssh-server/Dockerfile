@@ -61,7 +61,7 @@ RUN apt-get update \
 RUN sed -i 's/^# *en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen \
     && locale-gen
 
-# Fil-C 0.684's generated setup.sh checks x86_64's multiarch path on every
+# Fil-C 0.685's generated setup.sh checks x86_64's multiarch path on every
 # architecture. Its fallback leaves os-include/asm dangling on aarch64, hiding
 # the seccomp and tun UAPI behind a missing asm/types.h. Use the architecture-
 # specific path, as Fil-C's own build_os_include.sh does.
@@ -148,9 +148,9 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/openssh.tar.gz \
     && tar --strip-components=1 -xzf /tmp/openssh.tar.gz \
     && rm /tmp/openssh.tar.gz
 
-# Four patches adapt pristine OpenSSH 10.5p1 to Fil-C 0.684 and are gated on
+# Two patches adapt pristine OpenSSH 10.5p1 to Fil-C 0.685 and are gated on
 # __FILC__ so an unpatched build keeps upstream behaviour. The first carries
-# over the Fil-C 0.684 OpenSSH port's seccomp changes and teaches the sandbox
+# over the Fil-C 0.685 OpenSSH port's seccomp changes and teaches the sandbox
 # about the runtime's threads: it locks them before the filter is installed,
 # allows the sched_yield and MAP_NORESERVE mmap they issue in the sandboxed
 # child, and makes violations kill the process rather than one thread of it.
@@ -158,20 +158,12 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/openssh.tar.gz \
 # upstream behavior.
 # The second routes setproctitle through the runtime, because under Fil-C the
 # argv area belongs to it and the classic copy-over-argv path is unavailable.
-# The third aligns one generated libcrux Result payload to work around an
-# aarch64 aggregate-lowering bug fixed after 0.684 in Fil-C commit e0ded6df4296.
-# The fourth makes Fil-C/AArch64 select sntrup cryptoint's portable C fallbacks,
-# because 0.684 cannot lower the generated AArch64 inline assembly.
 COPY patches/0001-prepare-seccomp-sandbox-for-fil-c.patch /tmp/openssh-filc-sandbox.patch
 COPY patches/0002-report-process-title-through-fil-c.patch /tmp/openssh-filc-proctitle.patch
-COPY patches/0003-align-libcrux-result-for-fil-c.patch /tmp/openssh-filc-libcrux.patch
-COPY patches/0004-use-portable-sntrup-cryptoint-on-fil-c-aarch64.patch /tmp/openssh-filc-sntrup.patch
 RUN patch --batch --forward -p1 < /tmp/openssh-filc-sandbox.patch \
     && patch --batch --forward -p1 < /tmp/openssh-filc-proctitle.patch \
-    && patch --batch --forward -p1 < /tmp/openssh-filc-libcrux.patch \
-    && patch --batch --forward -p1 < /tmp/openssh-filc-sntrup.patch \
-    && test "$(grep -Fxc '#elif defined(__GNUC__) && defined(__aarch64__) && !defined(__FILC__)' sntrup761.c)" -eq 78 \
-    && ! grep -Fxq '#elif defined(__GNUC__) && defined(__aarch64__)' sntrup761.c \
+    && test "$(grep -Fxc '#elif defined(__GNUC__) && defined(__aarch64__)' sntrup761.c)" -eq 78 \
+    && ! grep -Fq 'defined(__aarch64__) && !defined(__FILC__)' sntrup761.c \
     && test "$(grep -Fxc '#if defined(__GNUC__) && defined(__x86_64__)' sntrup761.c)" -eq 78
 
 # --prefix=/ with explicit bin, libexec and configuration directories puts the
@@ -201,7 +193,7 @@ RUN patch --batch --forward -p1 < /tmp/openssh-filc-sandbox.patch \
 # PAM, libedit, Kerberos and audit are all opt-in upstream and stay off, so
 # nothing outside zlib and OpenSSL reaches the link.
 #
-# OpenSSH's hardening probe enables -ftrapv, but Fil-C 0.684 accepts the probe
+# OpenSSH's hardening probe enables -ftrapv, but Fil-C 0.685 accepts the probe
 # while leaving its llvm.ubsantrap overflow paths as unsupported-intrinsic
 # panics. Suppress only that false-positive probe and use -fwrapv so signed
 # overflow is defined rather than optimizer-dependent. This gives up upstream's
@@ -596,7 +588,7 @@ RUN set -euo pipefail; \
 # seccomp filter and no-new-privileges state on every execution-capable Fil-C
 # task, observes a real process title, rejects an unauthorized key, proves the
 # setuid ssh-keysign transition from an unprivileged client, survives SIGHUP,
-# and shuts down cleanly. Fil-C 0.684's musl startup keeps the original thread-
+# and shuts down cleanly. Fil-C 0.685's musl startup keeps the original thread-
 # group leader signal-blocked in an infinite pause solely to preserve
 # /proc/self; it never enters Fil-C or application code. The task checks that
 # exact leader as the sole exception, including the mask with all blockable
