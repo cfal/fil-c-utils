@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
-ARG FILC_VERSION=0.684
-ARG FILC_X86_64_SHA256=eefb594bcbc1261a18dfa8b50041674635f53df2b5fe067915b5652adaed4e3f
-ARG FILC_AARCH64_SHA256=564813b819a6e73879bdd993e2176b38ccbd5c5219e5adcbe1589e874c860666
+ARG FILC_VERSION=0.685
+ARG FILC_X86_64_SHA256=d12bd30c33f18179a9355b32ea44ba61dcc0342c7d77d1ac2548852e64994727
+ARG FILC_AARCH64_SHA256=3f24d1dc84cf66422740b83e68d830669ff263dd0a7d1ea0a133d802f47681b0
 ARG SEVENZIP_VERSION=26.03
 ARG SEVENZIP_ARCHIVE_VERSION=2603
 ARG SEVENZIP_SHA256=9cbde5099c6deb73691b0579063da5827522ccbbcba3f0020fd04e8c8c16c0d4
@@ -72,19 +72,6 @@ RUN for source in C/AesOpt.c C/Aes.c C/Blake2s.c C/LzFind.c C/SwapBytes.c \
         chmod u+w "${source}" && sed -i 's/\r$//' "${source}"; \
     done \
     && patch --batch --forward -p1 < /tmp/7zip-no-avx.patch
-
-COPY patches/0003-use-portable-bit-reversal-on-fil-c-aarch64.patch /tmp/7zip-fil-c-arm.patch
-RUN chmod u+w CPP/7zip/Compress/BitlDecoder.h \
-    && sed -i 's/\r$//' CPP/7zip/Compress/BitlDecoder.h \
-    && patch --batch --forward -p1 < /tmp/7zip-fil-c-arm.patch
-
-COPY patches/0004-align-record-vector-items-on-fil-c-aarch64.patch /tmp/7zip-fil-c-arm-records.patch
-RUN for source in CPP/7zip/Archive/Rar/RarHandler.h \
-                  CPP/7zip/Archive/Udf/UdfHandler.h \
-                  CPP/7zip/Archive/SquashfsHandler.cpp; do \
-        chmod u+w "${source}" && sed -i 's/\r$//' "${source}"; \
-    done \
-    && patch --batch --forward -p1 < /tmp/7zip-fil-c-arm-records.patch
 
 WORKDIR /src/CPP/7zip/Bundles/Alone2
 RUN make -f makefile.gcc -j"$(nproc)" \

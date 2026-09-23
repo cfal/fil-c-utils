@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
-ARG FILC_VERSION=0.684
-ARG FILC_X86_64_SHA256=eefb594bcbc1261a18dfa8b50041674635f53df2b5fe067915b5652adaed4e3f
-ARG FILC_AARCH64_SHA256=564813b819a6e73879bdd993e2176b38ccbd5c5219e5adcbe1589e874c860666
+ARG FILC_VERSION=0.685
+ARG FILC_X86_64_SHA256=d12bd30c33f18179a9355b32ea44ba61dcc0342c7d77d1ac2548852e64994727
+ARG FILC_AARCH64_SHA256=3f24d1dc84cf66422740b83e68d830669ff263dd0a7d1ea0a133d802f47681b0
 ARG ZLIB_VERSION=1.3.2
 ARG ZLIB_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
 ARG OPENSSL_VERSION=4.0.2
@@ -127,9 +127,6 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/curl.tar.xz \
     && echo "${CURL_SHA256}  /tmp/curl.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/curl.tar.xz \
     && rm /tmp/curl.tar.xz
-
-COPY patches/0001-use-sched-yield-under-fil-c-on-aarch64.patch /tmp/curl-fil-c.patch
-RUN patch --batch --forward -p1 < /tmp/curl-fil-c.patch
 
 # The CA bundle is read from the platform rather than embedded. curl's
 # --with-ca-embed would compile a copy into the executable and then prefer it
