@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
-ARG FILC_VERSION=0.684
-ARG FILC_X86_64_SHA256=eefb594bcbc1261a18dfa8b50041674635f53df2b5fe067915b5652adaed4e3f
-ARG FILC_AARCH64_SHA256=564813b819a6e73879bdd993e2176b38ccbd5c5219e5adcbe1589e874c860666
+ARG FILC_VERSION=0.685
+ARG FILC_X86_64_SHA256=d12bd30c33f18179a9355b32ea44ba61dcc0342c7d77d1ac2548852e64994727
+ARG FILC_AARCH64_SHA256=3f24d1dc84cf66422740b83e68d830669ff263dd0a7d1ea0a133d802f47681b0
 ARG GZIP_VERSION=1.14
 ARG GZIP_SHA256=01a7b881bd220bfdf615f97b8718f80bdfd3f6add385b993dcf6efd14e8c0ac6
 
@@ -53,11 +53,13 @@ RUN case "${TARGETARCH}" in \
     && rm /tmp/filc.tar.xz
 
 WORKDIR /src
-# GNU's mirror redirector avoids recurring ARM-runner routing timeouts to the
-# primary FTP host. The pinned checksum remains the source-of-truth integrity
-# check regardless of which official mirror serves the archive.
+# Prefer GNU's mirror redirector because the primary host has recurring
+# ARM-runner routing timeouts, but fall back to the primary when a selected
+# mirror has not synchronized the release. The checksum covers both sources.
 RUN curl -fsSL ${FETCH_RETRY} -o /tmp/gzip.tar.xz \
         "https://ftpmirror.gnu.org/gzip/gzip-${GZIP_VERSION}.tar.xz" \
+    || curl -fsSL ${FETCH_RETRY} -o /tmp/gzip.tar.xz \
+        "https://ftp.gnu.org/gnu/gzip/gzip-${GZIP_VERSION}.tar.xz" \
     && echo "${GZIP_SHA256}  /tmp/gzip.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/gzip.tar.xz \
     && rm /tmp/gzip.tar.xz

@@ -415,7 +415,7 @@ helper's root transition rather than only its executable path. Those overrides
 are isolated so they cannot alter the other 87 cases. A live preauthentication
 connection also verifies that every
 execution-capable Fil-C task has no-new-privileges and the seccomp filter.
-Fil-C 0.684 keeps only its original, fully signal-blocked thread-group leader
+Fil-C 0.685 keeps only its original, fully signal-blocked thread-group leader
 outside that filter in a permanent `pause()` loop to preserve `/proc/self`;
 the build asserts it is the sole exception. The remaining skips need an
 external DNSSEC fixture, ptrace tooling and a non-root harness, a PAM or
@@ -681,8 +681,8 @@ than content-addressed image digests.
 
 | Component | Version | SHA-256 |
 | --- | --- | --- |
-| Fil-C (x86_64) | 0.684 | `eefb594bcbc1261a18dfa8b50041674635f53df2b5fe067915b5652adaed4e3f` |
-| Fil-C (aarch64) | 0.684 | `564813b819a6e73879bdd993e2176b38ccbd5c5219e5adcbe1589e874c860666` |
+| Fil-C (x86_64) | 0.685 | `d12bd30c33f18179a9355b32ea44ba61dcc0342c7d77d1ac2548852e64994727` |
+| Fil-C (aarch64) | 0.685 | `3f24d1dc84cf66422740b83e68d830669ff263dd0a7d1ea0a133d802f47681b0` |
 | 7-Zip source | 26.03 | `9cbde5099c6deb73691b0579063da5827522ccbbcba3f0020fd04e8c8c16c0d4` |
 | unRAR source | 7.3.1 | `634900842a3737d9cc15bbcc71d4c74cc713437e0bca296a573424fe5f2660ab` |
 | GNU tar source | 1.35 | `4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16` |
@@ -762,16 +762,11 @@ RAR compression algorithm. Review `out/licenses/` before redistribution.
   account database. The default configuration still spells
   `KbdInteractiveAuthentication yes`, but no keyboard-interactive backend is
   compiled in, so that method is inert. OpenSSH shares curl's no-assembly
-  OpenSSL and the throughput and side-channel caveats above. Fil-C 0.684 cannot
+  OpenSSL and the throughput and side-channel caveats above. Fil-C 0.685 cannot
   lower the overflow traps from OpenSSH's `-ftrapv` hardening flag, so this
   build uses `-fwrapv`: signed overflow is defined to wrap instead of aborting.
   Fil-C still checks every memory access, but a non-memory overflow logic bug
-  continues with the wrapped value rather than failing immediately. On
-  AArch64, sntrup761 uses cryptoint's portable C because Fil-C 0.684 cannot
-  lower its AArch64 inline assembly; sntrup and ML-KEM remain enabled.
-  Cryptoint intends this fallback to resist timing-changing optimization but
-  does not guarantee constant-time execution, and its Fil-C/AArch64 machine
-  code has not been side-channel audited.
+  continues with the wrapped value rather than failing immediately.
 - tmux is built with sixel image support and utf8proc, which replaces its
   built-in character-width tables with fuller Unicode ones. systemd integration
   is left off: it would link libsystemd and defeat a self-contained static
@@ -1050,13 +1045,11 @@ versa.
 ### Compatibility details
 
 7-Zip's x86 feature detection normally uses inline CPUID and XGETBV assembly.
-Its patch substitutes Fil-C's supported intrinsic interfaces on x86 only; ARM64
-keeps 7-Zip's native architecture paths. One of those paths uses the inline ARM
-`rbit` instruction in the Deflate decoder, which Fil-C 0.684 cannot lower. An
-ARM-only patch selects 7-Zip's existing bit-reversal table instead, and the
-Dockerfile gates both Deflate-in-7z and ZIP decoding. The build also defines
-`Z7_NO_LARGE_PAGES`; 7-Zip's 2 MiB alignment request exceeds Fil-C's supported
-allocation alignment.
+Its patch substitutes Fil-C's supported intrinsic interfaces on x86 only;
+ARM64 keeps 7-Zip's native architecture paths. Fil-C 0.685 directly supports
+the `rbit` instruction in the Deflate decoder, so that path no longer needs a
+portable-table fallback. The build also defines `Z7_NO_LARGE_PAGES`; 7-Zip's
+2 MiB alignment request exceeds Fil-C's supported allocation alignment.
 
 A second 7-Zip patch removes the AVX-family SIMD paths. Fil-C implements the
 SSE and AES-NI intrinsics 7-Zip uses, but not the AVX ones: the VAES AES path,
@@ -1070,12 +1063,10 @@ the definition and the dispatch for each path, since 7-Zip repeats the same
 compiler-version block in `AesOpt.c` and `Aes.c` and `MyAes.cpp`, and again in
 `Sha512Opt.c` and `Sha512.c`. SSE and AES-NI stay enabled.
 
-Three 7-Zip handlers keep 12-byte POD records in `CRecordVector`. The AArch64
-ABI copies those values with an 8-byte access followed by a 4-byte access, while
-their normal 12-byte stride leaves every other element only 4-byte aligned.
-Fil-C correctly rejects that widened access. An ARM-only patch aligns the RAR,
-UDF, and SquashFS records to 8 bytes, making their internal stride 16 bytes. The
-change costs 4 bytes per live record and does not affect any on-disk layout.
+Three 7-Zip handlers keep naturally 4-byte-aligned, 12-byte POD records in
+`CRecordVector` and pass them by value. Fil-C 0.685 fixes the AArch64
+small-aggregate lowering that previously represented those values as pointer
+slots, so the upstream RAR, UDF, and SquashFS layouts now build unchanged.
 
 unRAR normally enables packed structures and misaligned integer access on
 x86-64 and ARM64. Fil-C requires pointer slots to retain their natural
@@ -1144,11 +1135,10 @@ curl needs the same libtool treatment as XZ, for the same reason: a plain
 `make` time is what produces the static PIE. Overriding `LDFLAGS` there
 replaces what configure recorded, so `-L/deps/lib` has to be repeated.
 
-On ARM64, curl's global-init lock normally uses an inline `yield` instruction
-that Fil-C compiles into a run-time trap. The local patch excludes that
-optional assembly under Fil-C and selects curl's existing `sched_yield()`
-fallback. Curl's thread-safety test exercises the patched lock. Git statically
-links its own libcurl and applies the same patch.
+On ARM64, curl's global-init lock uses an inline `yield` instruction. Fil-C
+0.685 supports that instruction directly, so curl and git's statically linked
+libcurl both retain the upstream lock path. Curl's thread-safety test exercises
+it.
 
 The CA bundle is not embedded. curl's `--with-ca-embed` would compile a copy
 into the executable, but it prefers that copy over the system store rather than
@@ -1163,35 +1153,13 @@ assembly block and several optional alignment blocks that do not honor
 `ZSTD_DISABLE_ASM`, so the local patch extends those guards and selects the
 existing portable C implementation.
 
-On ARM64, `ZSTD_NO_INTRINSICS` also selects Zstandard's portable SWAR row
-matcher. Its NEON matcher uses structured `ld2` and `ld4` loads that Fil-C
-0.684 compiles into unhandled-intrinsic traps. The flag is architecture-scoped,
-so x86 keeps its supported SIMD matcher.
-
-Zstandard's optimal parser also stores 12-byte repcode arrays in 28-byte table
-entries. Clang widens their copies to an 8-byte access on ARM64, leaving every
-other entry under-aligned for Fil-C. The ARM-specific patch aligns that member
-to 8 bytes and pads each entry to 32 bytes; the compression algorithm is
-unchanged, at a cost of about 16 KiB per optimal-parser table.
-
-The same 8-byte chunking applies when Zstandard passes its 12-byte frame
-parameters by value. `ZSTD_parameters` normally places that member at offset
-28, so the ARM patch aligns it and grows the parameter structure from 40 to 48
-bytes under Fil-C. Dictionary training exercises this path in the upstream
-suite.
-
-FastCover and the legacy dictionary builder likewise nest a 12-byte parameter
-block at offsets 44 and 4. Those members are aligned under Fil-C on ARM64,
-growing the structures from 56 to 64 bytes and 16 to 24 bytes respectively.
-The regular COVER layout already has the required alignment.
-
-The legacy dictionary builder also keeps 12-byte items in a table and passes
-them by value. Its ARM patch gives those items 8-byte alignment, changing the
-table stride from 12 to 16 bytes so the ABI's widened copies remain aligned.
-
-Long-distance matching uses another internal table of 12-byte raw sequences.
-Those entries receive the same ARM-only alignment and 16-byte stride because
-the matcher reads them by value.
+Fil-C 0.685 lowers the structured NEON loads used by Zstandard's ARM row
+matcher, so AArch64 now keeps upstream intrinsics enabled. Its corrected
+small-aggregate lowering also handles Zstandard's naturally aligned 12-byte
+repcodes, parameters, dictionary items, and raw sequences without padding.
+The upstream suite exercises the matcher, dictionary training, optimal parser,
+and long-distance matching, while the binary scan still rejects any unhandled
+intrinsic marker.
 
 nano is the second utility with dependencies, and like curl it builds them with
 the same compiler into a shared `/deps` prefix: ncurses for the terminal and
@@ -1231,17 +1199,13 @@ preauthentication seccomp filter, then allows the runtime's `sched_yield` and
 runtime-managed threads alive is unsafe. Its second patch routes process-title
 updates through `zsetproctitle`; Fil-C owns the original `argv` storage, so
 OpenSSH's usual overwrite-in-place implementation is unavailable. The Fil-C
-0.684 aarch64 release also leaves its kernel-UAPI `asm` include symlink dangling
+0.685 aarch64 release also leaves its kernel-UAPI `asm` include symlink dangling
 on Debian multiarch systems; the build retargets it to the architecture-specific
 directory and compiles a seccomp/tun header probe before building dependencies.
-Finally, Fil-C 0.684 misclassifies a byte-aligned libcrux aggregate in the
-aarch64 calling convention. A Fil-C/AArch64-only alignment attribute works
-around that compiler bug without disabling OpenSSH's ML-DSA or ML-KEM support;
-a static layout assertion and native cryptographic tests guard the workaround.
-The generated sntrup761 cryptoint code has a separate AArch64 assembly path
-that Fil-C 0.684 cannot lower. A fourth patch selects cryptoint's portable C
-fallbacks only on Fil-C/AArch64; sntrup761x25519 remains enabled, while x86-64
-and non-Fil-C AArch64 builds retain their assembly paths.
+Fil-C 0.685 fixes the byte-aligned libcrux aggregate lowering and supports the
+generated sntrup761 cryptoint AArch64 inline assembly, so both upstream paths
+build unchanged. Native ML-DSA key generation, OpenSSH's cryptographic tests,
+and live default key exchange cover them.
 
 ### Updating a dependency
 
