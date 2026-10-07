@@ -7,8 +7,8 @@ ARG NCURSES_VERSION=6.6
 ARG NCURSES_SHA256=355b4cbbed880b0381a04c46617b7656e362585d52e9cf84a67e2009b749ff11
 ARG LIBEVENT_VERSION=2.1.13
 ARG LIBEVENT_SHA256=f7e9383b8c0baa81b687e5b5eecc01beefaf1b19b64151d95ed61647fe7a315c
-ARG UTF8PROC_VERSION=2.11.3
-ARG UTF8PROC_SHA256=abfed50b6d4da51345713661370290f4f4747263ee73dc90356299dfc7990c78
+ARG UTF8PROC_VERSION=2.12.0
+ARG UTF8PROC_SHA256=a393fbef160835fb315bc3e91ba8d86f7a73a7cec9e6198b6c60b848b498bfeb
 ARG TMUX_VERSION=3.7c
 ARG TMUX_SHA256=7c60cae9a0e25288e2e24750aafc9e8800fc7fd4555e447e1b29ee4201cfb3bf
 # The release tarball ships no tests. The suite lives only in the git tree, so
@@ -133,7 +133,7 @@ RUN CC=/opt/filc/build/bin/clang \
 # `make install` would additionally require the shared library.
 WORKDIR /utf8proc
 RUN curl -fsSL ${FETCH_RETRY} -o /tmp/utf8proc.tar.gz \
-        "https://github.com/JuliaStrings/utf8proc/archive/refs/tags/v${UTF8PROC_VERSION}.tar.gz" \
+        "https://github.com/JuliaStrings/utf8proc/releases/download/v${UTF8PROC_VERSION}/utf8proc-${UTF8PROC_VERSION}.tar.gz" \
     && echo "${UTF8PROC_SHA256}  /tmp/utf8proc.tar.gz" | sha256sum -c - \
     && tar --strip-components=1 -xzf /tmp/utf8proc.tar.gz \
     && rm /tmp/utf8proc.tar.gz
