@@ -1110,6 +1110,12 @@ and restore under Fil-C. gzip 1.15 no longer vendors that helper, so it needs no
 equivalent patch. Both Dockerfiles reject the compiler's trap marker if any
 unsupported inline assembly remains.
 
+gzip 1.15 also moved `<signal.h>` below `gzip.h`, which defines a legacy `head`
+macro. Pizfix's AArch64 signal-context structs use the same field name, so a
+Fil-C/AArch64-scoped patch includes the signal declarations before that macro
+can rewrite them. Compilation itself verifies the patch: without it, the
+AArch64 build fails while parsing the Pizfix header.
+
 XZ uses `LDFLAGS=-Wc,-static` during `make`. Libtool consumes plain `-static`
 as a request to prefer static project libraries and otherwise emits a
 dynamically loaded Fil-C executable. `-Wc,-static` passes the flag through to
