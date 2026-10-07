@@ -5,10 +5,10 @@ ARG FILC_X86_64_SHA256=60bfbe8ee63d7e462394aa8d5e44fee675de892bcf800d9cc80d86378
 ARG FILC_AARCH64_SHA256=142987830090df8c0cffa0bbcad32a930f661683f8c5073b21986e39aa7209f2
 ARG ZLIB_VERSION=1.3.2
 ARG ZLIB_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
-ARG OPENSSL_VERSION=4.0.2
-ARG OPENSSL_SHA256=736b467530f916737b7031310ccb21d8218c6229e61e8e160cd1d3458cd543a8
-ARG OPENSSH_VERSION=10.5p1
-ARG OPENSSH_SHA256=d44d28a839ea9daf969cc69150fde59910b2b39361dad81a3bd6cbd19218db11
+ARG OPENSSL_VERSION=4.0.3
+ARG OPENSSL_SHA256=325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9
+ARG OPENSSH_VERSION=10.6p1
+ARG OPENSSH_SHA256=a9dc9565dffe8640f64d863cd29a32bc4a3dbdec0566a7fc44c5d6ee767d5f39
 
 FROM ubuntu:24.04 AS build
 
@@ -148,7 +148,7 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/openssh.tar.gz \
     && tar --strip-components=1 -xzf /tmp/openssh.tar.gz \
     && rm /tmp/openssh.tar.gz
 
-# Two patches adapt pristine OpenSSH 10.5p1 to Fil-C 0.686 and are gated on
+# Two patches adapt pristine OpenSSH 10.6p1 to Fil-C 0.686 and are gated on
 # __FILC__ so an unpatched build keeps upstream behaviour. The first carries
 # over the Fil-C 0.686 OpenSSH port's seccomp changes and teaches the sandbox
 # about the runtime's threads: it locks them before the filter is installed,
@@ -196,9 +196,12 @@ RUN patch --batch --forward -p1 < /tmp/openssh-filc-sandbox.patch \
 # OpenSSH's hardening probe enables -ftrapv, but Fil-C 0.686 accepts the probe
 # while leaving its llvm.ubsantrap overflow paths as unsupported-intrinsic
 # panics. Suppress only that false-positive probe and use -fwrapv so signed
-# overflow is defined rather than optimizer-dependent. This gives up upstream's
-# immediate overflow abort; every other hardening flag is retained and asserted.
-RUN CFLAGS="-O2 -g -fwrapv" LDFLAGS="-static -L/deps/lib" \
+# overflow is defined rather than optimizer-dependent. OpenSSH 10.6 also stops
+# enabling _FORTIFY_SOURCE globally because it breaks older NetBSD releases;
+# this fixed Linux/musl target keeps the previously validated setting explicit.
+# This gives up upstream's immediate overflow abort; every other hardening flag
+# is retained and asserted.
+RUN CFLAGS="-O2 -g -fwrapv -D_FORTIFY_SOURCE=2" LDFLAGS="-static -L/deps/lib" \
         ossh_cv_cflag__ftrapv=no ./configure \
         --prefix=/ --bindir=/bin --sbindir=/bin \
         --libexecdir=/libexec --sysconfdir=/etc/ssh \
@@ -311,7 +314,7 @@ RUN make compat-tests \
         test -x "openbsd-compat/regress/${test_binary}"; \
     done
 
-# OpenSSH 10.5p1's ssh-tty.sh checks for a tab with a `*\t*` POSIX case
+# OpenSSH 10.6p1's ssh-tty.sh checks for a tab with a `*\t*` POSIX case
 # pattern. Ubuntu's /bin/sh parses that as a literal `t`, so root's normal
 # HOME makes the test self-skip even though it contains no whitespace. Keep
 # the workaround local to this test. Docker builds also leave SHELL unset, so

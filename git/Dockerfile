@@ -5,18 +5,18 @@ ARG FILC_X86_64_SHA256=60bfbe8ee63d7e462394aa8d5e44fee675de892bcf800d9cc80d86378
 ARG FILC_AARCH64_SHA256=142987830090df8c0cffa0bbcad32a930f661683f8c5073b21986e39aa7209f2
 ARG ZLIB_VERSION=1.3.2
 ARG ZLIB_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
-ARG OPENSSL_VERSION=4.0.2
-ARG OPENSSL_SHA256=736b467530f916737b7031310ccb21d8218c6229e61e8e160cd1d3458cd543a8
+ARG OPENSSL_VERSION=4.0.3
+ARG OPENSSL_SHA256=325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9
 ARG CURL_VERSION=8.22.0
 ARG CURL_SHA256=f7ef3ae8a22e521f289803fe93543eb64c329b58aa73a9e224dfd915a2a5f4f7
-ARG PCRE2_VERSION=10.48
-ARG PCRE2_SHA256=ebcc25aadf2a51fa1fefa9b8bc9e7a79b3dae86870a0f1152a22e42befd46888
-ARG EXPAT_VERSION=2.8.5
-ARG EXPAT_TAG=R_2_8_5
-ARG EXPAT_SHA256=920dde485e15eda0cce8d2310b41d492c534e5e3d89ad407a0b4176dd2ff88fe
+ARG PCRE2_VERSION=10.49
+ARG PCRE2_SHA256=929f0b20e62879252a15886b06c89f1edef61a363cbd5826fb041080a5e557ae
+ARG EXPAT_VERSION=2.9.0
+ARG EXPAT_TAG=R_2_9_0
+ARG EXPAT_SHA256=16afbb9cefead2aa278105cf27d9f597bde7fbf3dbb85015857ca7ca6a4e89ba
 ARG GIT_TEST_JOBS=
-ARG GIT_VERSION=2.55.0
-ARG GIT_SHA256=457fdb04dc8728e007d4688695e6912e6f680727920f2a40bf11eacc17505357
+ARG GIT_VERSION=2.56.0
+ARG GIT_SHA256=26c56c296b38c0695b26fa95f475f1d01704d2d38e73465ca30b0b2f5dc789d3
 
 FROM ubuntu:24.04 AS build
 
@@ -181,7 +181,7 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/git.tar.xz \
 # adjusts each option table accordingly; it also makes compat/obstack allocate
 # a fresh chunk rather than deriving one pointer from another allocation.
 #
-# Upstream Fil-C carries the same change against git 2.46.0. This is that work
+# Upstream Fil-C carries the same change against git 2.46.0. This work was first
 # rebased onto 2.55.0, which needed more than a refresh: 2.55 restructured
 # parse-options.c and added option tables 2.46 never had. The rebase was driven
 # by the compiler rather than by hand, since changing the field type turns every
@@ -201,7 +201,7 @@ RUN patch --batch --forward -p1 < /tmp/git-filc.patch
 # change, so an install that passed a shorter list would recompile and relink
 # the binaries that the tests just vetted.
 #
-# NO_RUST: git 2.55 builds some subsystems in Rust, and Fil-C compiles C and
+# NO_RUST: git 2.56 builds some subsystems in Rust, and Fil-C compiles C and
 #   C++ only. The C implementations they replace are still present and are what
 #   this build uses.
 # NO_REGEX=NeedsStartEnd: musl's regexec has no REG_STARTEND, so git's bundled
@@ -419,7 +419,7 @@ RUN set -e; \
     echo "git test wall time: $(( $(date +%s) - started ))s with ${jobs} jobs on $(nproc) cpus"; \
     ran="$(sed -n 's/^Files=\([0-9][0-9]*\),.*/\1/p' /tmp/git-tests.log | tail -1)"; \
     echo "git test files run: ${ran}"; \
-    test "${ran:-0}" -ge 1040
+    test "${ran:-0}" -ge 1050
 
 # git installs a large tree: the executables, the exec-path helpers it runs as
 # subprocesses, and its templates. Everything that shapes that tree is in

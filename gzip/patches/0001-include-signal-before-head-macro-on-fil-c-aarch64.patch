@@ -1,0 +1,18 @@
+From: fil-c-utils maintainers
+Subject: [PATCH] Include signal.h before gzip's head macro on Fil-C AArch64
+
+gzip 1.15 includes signal.h after gzip.h defines a legacy macro named head.
+Pizfix's AArch64 signal context structs also have fields named head, so the
+preprocessor corrupts those declarations. Include signal.h before the macro is
+defined on the affected Fil-C target; the later include is then a guarded no-op.
+
+--- a/gzip.c
++++ b/gzip.c
+@@ -57,3 +57,6 @@ static char const license_msg[] =
+ #include <config.h>
+-
++#if defined __FILC__ && defined __aarch64__
++# include <signal.h>
++#endif
++
+ #include "tailor.h"

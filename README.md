@@ -376,17 +376,17 @@ delicate, and every one of them runs against the Fil-C binary.
 | Utility | Upstream suite | Result under Fil-C |
 | --- | --- | --- |
 | GNU tar | Autotest, 226 files | 208 pass, 36 skip |
-| curl | 1919 cases | 1675 pass, 244 skip |
+| curl | 1664 enabled cases | 1664 pass |
 | GNU Wget | `tests/` + `testenv/`, 136 cases | 134 pass, 2 skip |
 | tmux | `regress/`, 35 cases (git only) | 35 pass |
-| gzip | 30 cases | 29 pass, 1 skip |
+| gzip | 34 cases | 33 pass, 1 skip |
 | XZ Utils | 21 cases | 21 pass |
 | Zstandard | `playTests.sh` and fuzzers | all pass |
 | bzip2 | 3 sample round trips | pass |
 | 7-Zip | **none ships** | — |
 | unRAR | **none ships** | — |
 | GNU nano | **none ships** | pseudo-terminal edit-and-save |
-| git | 1046 files | all pass, 6 cases skipped |
+| git | 1059 files | all pass, 6 cases skipped |
 | OpenSSH | `make tests`: 97 functional cases, unit/file/compatibility tests | 87 functional pass, 10 skip; PTY, password, and hostbased pass separately |
 
 Nothing needed to be excluded or marked expected-to-fail: Fil-C causes no
@@ -683,22 +683,22 @@ than content-addressed image digests.
 | --- | --- | --- |
 | Fil-C (x86_64) | 0.686 | `60bfbe8ee63d7e462394aa8d5e44fee675de892bcf800d9cc80d86378cad6b07` |
 | Fil-C (aarch64) | 0.686 | `142987830090df8c0cffa0bbcad32a930f661683f8c5073b21986e39aa7209f2` |
-| 7-Zip source | 26.03 | `9cbde5099c6deb73691b0579063da5827522ccbbcba3f0020fd04e8c8c16c0d4` |
+| 7-Zip source | 26.04 | `9691944c0fe0d01bb49373a704fb983fd33bc98b1738695179dfbf99ac1734f6` |
 | unRAR source | 7.3.1 | `634900842a3737d9cc15bbcc71d4c74cc713437e0bca296a573424fe5f2660ab` |
 | GNU tar source | 1.35 | `4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16` |
-| GNU gzip source | 1.14 | `01a7b881bd220bfdf615f97b8718f80bdfd3f6add385b993dcf6efd14e8c0ac6` |
+| GNU gzip source | 1.15 | `9aa0cc780dec156b8282844833b342ab7cb08c25d2cd9a1869cdd0df31deff48` |
 | bzip2 source | 1.0.8 | `ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269` |
 | XZ Utils source | 5.8.4 | `4ce24038fd4221e0d13bc1a2de7a4db56e90b92b3bf75321f6c14be73f65de4b` |
 | Zstandard source | 1.5.7 | `eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3` |
 | curl source | 8.22.0 | `f7ef3ae8a22e521f289803fe93543eb64c329b58aa73a9e224dfd915a2a5f4f7` |
 | GNU Wget source | 1.25.0 | `766e48423e79359ea31e41db9e5c289675947a7fcf2efdcedb726ac9d0da3784` |
-| OpenSSL source (curl, git, OpenSSH) | 4.0.2 | `736b467530f916737b7031310ccb21d8218c6229e61e8e160cd1d3458cd543a8` |
-| OpenSSL source (wget) | 3.6.4 | `9bffaa1ad1e07b354c21bd3324ec02fa15579f45a7d0494b3e74bc449b7333ef` |
+| OpenSSL source (curl, git, OpenSSH) | 4.0.3 | `325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9` |
+| OpenSSL source (wget) | 3.6.5 | `a2157c2830efdec3788939b00c9b0638306d3f0bbb76dc4832ee503bb397df98` |
 | zlib source | 1.3.2 | `bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16` |
 | libunistring source | 1.4.2 | `5b46e74377ed7409c5b75e7a96f95377b095623b689d8522620927964a41499c` |
 | libidn2 source | 2.3.8 | `f557911bf6171621e1f72ff35f5b1825bb35b52ed45325dcdee931e5d3c0787a` |
 | libpsl source | 0.23.3 | `93941f85a1e7bd593fa94f299233cb5dfc91cd144fd9a78a6ceb75001c5b03be` |
-| PCRE2 source | 10.48 | `ebcc25aadf2a51fa1fefa9b8bc9e7a79b3dae86870a0f1152a22e42befd46888` |
+| PCRE2 source | 10.49 | `929f0b20e62879252a15886b06c89f1edef61a363cbd5826fb041080a5e557ae` |
 | c-ares source | 1.34.8 | `c222b6d681096f9444d2c4863d2c1174019e27cacca0a4a5c114d36dd7d7bf78` |
 | GNU nano source | 9.1 | `5f47764274cb7532349ce0aa20ec10f1e8e851a6e9fa3eb66812c43d196db042` |
 | ncurses source | 6.6 | `355b4cbbed880b0381a04c46617b7656e362585d52e9cf84a67e2009b749ff11` |
@@ -706,10 +706,10 @@ than content-addressed image digests.
 | tmux source | 3.7c | `7c60cae9a0e25288e2e24750aafc9e8800fc7fd4555e447e1b29ee4201cfb3bf` |
 | tmux tests (git tag) | 3.7c | `5e7b0f533b66e5633e2b72a9d483f9534a343ab7011eb2621b6309dfba553daa` |
 | libevent source | 2.1.13 | `f7e9383b8c0baa81b687e5b5eecc01beefaf1b19b64151d95ed61647fe7a315c` |
-| utf8proc source | 2.11.3 | `abfed50b6d4da51345713661370290f4f4747263ee73dc90356299dfc7990c78` |
-| Git source | 2.55.0 | `457fdb04dc8728e007d4688695e6912e6f680727920f2a40bf11eacc17505357` |
-| Expat source | 2.8.5 | `920dde485e15eda0cce8d2310b41d492c534e5e3d89ad407a0b4176dd2ff88fe` |
-| OpenSSH portable source | 10.5p1 | `d44d28a839ea9daf969cc69150fde59910b2b39361dad81a3bd6cbd19218db11` |
+| utf8proc source | 2.12.0 | `a393fbef160835fb315bc3e91ba8d86f7a73a7cec9e6198b6c60b848b498bfeb` |
+| Git source | 2.56.0 | `26c56c296b38c0695b26fa95f475f1d01704d2d38e73465ca30b0b2f5dc789d3` |
+| Expat source | 2.9.0 | `16afbb9cefead2aa278105cf27d9f597bde7fbf3dbb85015857ca7ca6a4e89ba` |
+| OpenSSH portable source | 10.6p1 | `a9dc9565dffe8640f64d863cd29a32bc4a3dbdec0566a7fc44c5d6ee767d5f39` |
 
 The Dockerfile frontend, Ubuntu base image, and Ubuntu packages installed in
 the builder are not pinned to immutable digests or a snapshot repository. They
@@ -765,6 +765,8 @@ RAR compression algorithm. Review `out/licenses/` before redistribution.
   OpenSSL and the throughput and side-channel caveats above. Fil-C 0.686 cannot
   lower the overflow traps from OpenSSH's `-ftrapv` hardening flag, so this
   build uses `-fwrapv`: signed overflow is defined to wrap instead of aborting.
+  OpenSSH 10.6 no longer enables `_FORTIFY_SOURCE` for every platform; this
+  Linux/musl build opts into level 2 explicitly to retain its prior hardening.
   Fil-C still checks every memory access, but a non-memory overflow logic bug
   continues with the wrapped value rather than failing immediately.
 - tmux is built with sixel image support and utf8proc, which replaces its
@@ -775,7 +777,7 @@ RAR compression algorithm. Review `out/licenses/` before redistribution.
   shell the image does not contain.
 - git is built with its http and https remotes through libcurl, `grep -P`
   through PCRE2, and http pushing through expat. Two subsystems are off. git
-  2.55 implements some of its object-store code in Rust, and Fil-C compiles C
+  2.56 implements some of its object-store code in Rust, and Fil-C compiles C
   and C++ only, so `NO_RUST` selects the C implementations those replace.
   `NO_REGEX=NeedsStartEnd` uses git's bundled regex because musl's `regexec`
   has no `REG_STARTEND`. `core.fsyncMethod=batch` falls back to a full fsync
@@ -1100,13 +1102,20 @@ gzip defines `GNU_STANDARD=0` so its documented `gunzip` and `zcat` invocation
 names select decompression mode. The Dockerfile tests both aliases rather than
 assuming that creating the links is sufficient.
 
-gzip and nano both vendor gnulib's x87 control-word helper. On x86-64 its
-long-double formatting path normally saves and restores the precision control
-with inline `fnstcw` and `fldcw`, whose memory operands Fil-C turns into run-time
-traps. Fil-C's musl fenv implementation cannot change x87 precision, so the
-default extended precision remains in effect. Scoped patches omit the redundant
-save and restore under Fil-C. Both Dockerfiles reject the compiler's trap marker
-if any unsupported inline assembly remains.
+nano vendors gnulib's x87 control-word helper. On x86-64 its long-double
+formatting path normally saves and restores the precision control with inline
+`fnstcw` and `fldcw`, whose memory operands Fil-C turns into run-time traps.
+Fil-C's musl fenv implementation cannot change x87 precision, so the default
+extended precision remains in effect. A scoped patch omits the redundant save
+and restore under Fil-C. gzip 1.15 no longer vendors that helper, so it needs no
+equivalent patch. Both Dockerfiles reject the compiler's trap marker if any
+unsupported inline assembly remains.
+
+gzip 1.15 also moved `<signal.h>` below `gzip.h`, which defines a legacy `head`
+macro. Pizfix's AArch64 signal-context structs use the same field name, so a
+Fil-C/AArch64-scoped patch includes the signal declarations before that macro
+can rewrite them. Compilation itself verifies the patch: without it, the
+AArch64 build fails while parsing the Pizfix header.
 
 XZ uses `LDFLAGS=-Wc,-static` during `make`. Libtool consumes plain `-static`
 as a request to prefer static project libraries and otherwise emits a
