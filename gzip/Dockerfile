@@ -34,6 +34,7 @@ RUN apt-get update \
         libc6-dev \
         linux-libc-dev \
         make \
+        patch \
         patchelf \
         xz-utils \
     && rm -rf /var/lib/apt/lists/*
@@ -62,6 +63,9 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/gzip.tar.xz \
     && echo "${GZIP_SHA256}  /tmp/gzip.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/gzip.tar.xz \
     && rm /tmp/gzip.tar.xz
+
+COPY patches/0001-include-signal-before-head-macro-on-fil-c-aarch64.patch /tmp/gzip-fil-c.patch
+RUN patch --batch --forward -p1 < /tmp/gzip-fil-c.patch
 
 RUN FORCE_UNSAFE_CONFIGURE=1 \
     CC=/opt/filc/build/bin/clang \
