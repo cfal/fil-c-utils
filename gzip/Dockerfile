@@ -3,8 +3,8 @@
 ARG FILC_VERSION=0.685
 ARG FILC_X86_64_SHA256=d12bd30c33f18179a9355b32ea44ba61dcc0342c7d77d1ac2548852e64994727
 ARG FILC_AARCH64_SHA256=3f24d1dc84cf66422740b83e68d830669ff263dd0a7d1ea0a133d802f47681b0
-ARG GZIP_VERSION=1.14
-ARG GZIP_SHA256=01a7b881bd220bfdf615f97b8718f80bdfd3f6add385b993dcf6efd14e8c0ac6
+ARG GZIP_VERSION=1.15
+ARG GZIP_SHA256=9aa0cc780dec156b8282844833b342ab7cb08c25d2cd9a1869cdd0df31deff48
 
 FROM ubuntu:24.04 AS build
 
@@ -34,7 +34,6 @@ RUN apt-get update \
         libc6-dev \
         linux-libc-dev \
         make \
-        patch \
         patchelf \
         xz-utils \
     && rm -rf /var/lib/apt/lists/*
@@ -63,9 +62,6 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/gzip.tar.xz \
     && echo "${GZIP_SHA256}  /tmp/gzip.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/gzip.tar.xz \
     && rm /tmp/gzip.tar.xz
-
-COPY patches/0001-disable-x87-control-word-assembly-under-fil-c.patch /tmp/gzip-fil-c.patch
-RUN patch --batch --forward -p1 < /tmp/gzip-fil-c.patch
 
 RUN FORCE_UNSAFE_CONFIGURE=1 \
     CC=/opt/filc/build/bin/clang \
@@ -106,7 +102,7 @@ RUN set -e; \
     make check > /tmp/gzip-check.log 2>&1 || { tail -40 /tmp/gzip-check.log; exit 1; }; \
     grep -E '^# (TOTAL|PASS|FAIL|SKIP)' /tmp/gzip-check.log; \
     total="$(sed -n 's/^# TOTAL: *//p' /tmp/gzip-check.log | tail -1)"; \
-    test "${total}" -ge 25
+    test "${total}" -ge 34
 
 RUN install -Dm755 gzip /artifact/bin/gzip \
     && ln -s gzip /artifact/bin/gunzip \
