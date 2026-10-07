@@ -15,8 +15,8 @@ ARG EXPAT_VERSION=2.9.0
 ARG EXPAT_TAG=R_2_9_0
 ARG EXPAT_SHA256=16afbb9cefead2aa278105cf27d9f597bde7fbf3dbb85015857ca7ca6a4e89ba
 ARG GIT_TEST_JOBS=
-ARG GIT_VERSION=2.55.0
-ARG GIT_SHA256=457fdb04dc8728e007d4688695e6912e6f680727920f2a40bf11eacc17505357
+ARG GIT_VERSION=2.56.0
+ARG GIT_SHA256=26c56c296b38c0695b26fa95f475f1d01704d2d38e73465ca30b0b2f5dc789d3
 
 FROM ubuntu:24.04 AS build
 
@@ -181,7 +181,7 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/git.tar.xz \
 # adjusts each option table accordingly; it also makes compat/obstack allocate
 # a fresh chunk rather than deriving one pointer from another allocation.
 #
-# Upstream Fil-C carries the same change against git 2.46.0. This is that work
+# Upstream Fil-C carries the same change against git 2.46.0. This work was first
 # rebased onto 2.55.0, which needed more than a refresh: 2.55 restructured
 # parse-options.c and added option tables 2.46 never had. The rebase was driven
 # by the compiler rather than by hand, since changing the field type turns every
@@ -201,7 +201,7 @@ RUN patch --batch --forward -p1 < /tmp/git-filc.patch
 # change, so an install that passed a shorter list would recompile and relink
 # the binaries that the tests just vetted.
 #
-# NO_RUST: git 2.55 builds some subsystems in Rust, and Fil-C compiles C and
+# NO_RUST: git 2.56 builds some subsystems in Rust, and Fil-C compiles C and
 #   C++ only. The C implementations they replace are still present and are what
 #   this build uses.
 # NO_REGEX=NeedsStartEnd: musl's regexec has no REG_STARTEND, so git's bundled
@@ -419,7 +419,7 @@ RUN set -e; \
     echo "git test wall time: $(( $(date +%s) - started ))s with ${jobs} jobs on $(nproc) cpus"; \
     ran="$(sed -n 's/^Files=\([0-9][0-9]*\),.*/\1/p' /tmp/git-tests.log | tail -1)"; \
     echo "git test files run: ${ran}"; \
-    test "${ran:-0}" -ge 1040
+    test "${ran:-0}" -ge 1050
 
 # git installs a large tree: the executables, the exec-path helpers it runs as
 # subprocesses, and its templates. Everything that shapes that tree is in
