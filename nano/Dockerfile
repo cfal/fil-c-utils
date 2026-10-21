@@ -5,10 +5,10 @@ ARG FILC_X86_64_SHA256=60bfbe8ee63d7e462394aa8d5e44fee675de892bcf800d9cc80d86378
 ARG FILC_AARCH64_SHA256=142987830090df8c0cffa0bbcad32a930f661683f8c5073b21986e39aa7209f2
 ARG NCURSES_VERSION=6.6
 ARG NCURSES_SHA256=355b4cbbed880b0381a04c46617b7656e362585d52e9cf84a67e2009b749ff11
-ARG FILE_VERSION=5.46
-ARG FILE_SHA256=c9cc77c7c560c543135edc555af609d5619dbef011997e988ce40a3d75d86088
-ARG NANO_VERSION=9.1
-ARG NANO_SHA256=5f47764274cb7532349ce0aa20ec10f1e8e851a6e9fa3eb66812c43d196db042
+ARG FILE_VERSION=5.48
+ARG FILE_SHA256=ed14656883b23a364b4057c05595d93252da9bc473d30106519519d0da141283
+ARG NANO_VERSION=9.2
+ARG NANO_SHA256=05ecb99247b782e8a5b3a25ed4101dd034b0236902f7449bc9795b717642f7e9
 
 FROM ubuntu:24.04 AS build
 
@@ -114,7 +114,7 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/file.tar.gz \
     && rm /tmp/file.tar.gz
 
 # --datadir sets the database path compiled into the library, but `make install`
-# would also write the 5.46-format magic.mgc to that path, replacing the build
+# would also write the 5.48-format magic.mgc to that path, replacing the build
 # image's system database with one its own `file` (5.45) cannot read -- which
 # then reports every binary as "data" and breaks the provenance checks below.
 # Staging the install and copying only the pieces nano links against keeps the
