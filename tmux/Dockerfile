@@ -279,7 +279,7 @@ RUN set -e; \
         done; \
     }; \
     if ! setpriv --reuid=65534 --regid=65534 --clear-groups \
-            env TERM=screen HOME=/tmp TEST_TMUX=/src/tmux FILC_LOG_TO_FILE=1 \
+            env -u FILC_LOG_TO_FILE TERM=screen HOME=/tmp TEST_TMUX=/src/tmux \
             timeout -k 10 120 sh server-socket-error.sh \
             > /tmp/regress-server-socket-error.sh.log 2>&1; then \
         echo "--- server-socket-error.sh (failed as uid 65534) ---"; \
