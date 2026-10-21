@@ -31,8 +31,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  version-check-tests:
+    name: version checker tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - run: python3 tests/test_check_versions.py
+
   build:
     name: build
+    needs: version-check-tests
     uses: ./.github/workflows/build.yml
 
   test:
