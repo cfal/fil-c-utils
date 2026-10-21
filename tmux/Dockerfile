@@ -9,11 +9,11 @@ ARG LIBEVENT_VERSION=2.1.13
 ARG LIBEVENT_SHA256=f7e9383b8c0baa81b687e5b5eecc01beefaf1b19b64151d95ed61647fe7a315c
 ARG UTF8PROC_VERSION=2.12.0
 ARG UTF8PROC_SHA256=a393fbef160835fb315bc3e91ba8d86f7a73a7cec9e6198b6c60b848b498bfeb
-ARG TMUX_VERSION=3.7c
-ARG TMUX_SHA256=7c60cae9a0e25288e2e24750aafc9e8800fc7fd4555e447e1b29ee4201cfb3bf
+ARG TMUX_VERSION=3.8
+ARG TMUX_SHA256=e79c699c7e949dccd0a4a125e17b8d1261e311b16979dbc8eb34542f3966d82e
 # The release tarball ships no tests. The suite lives only in the git tree, so
 # the same tag is fetched a second time for it; see the test stage below.
-ARG TMUX_TESTS_SHA256=5e7b0f533b66e5633e2b72a9d483f9534a343ab7011eb2621b6309dfba553daa
+ARG TMUX_TESTS_SHA256=f873f9379c9cf30d3d66b642a955118c4fbb0019d046d13e6012340811e5dcb7
 
 FROM ubuntu:24.04 AS build
 
@@ -147,11 +147,15 @@ RUN make -j"$(nproc)" \
     && install -Dm644 libutf8proc.pc /deps/lib/pkgconfig/libutf8proc.pc
 
 WORKDIR /src
+COPY patches /tmp/patches
 RUN curl -fsSL ${FETCH_RETRY} -o /tmp/tmux.tar.gz \
         "https://github.com/tmux/tmux/releases/download/${TMUX_VERSION}/tmux-${TMUX_VERSION}.tar.gz" \
     && echo "${TMUX_SHA256}  /tmp/tmux.tar.gz" | sha256sum -c - \
     && tar --strip-components=1 -xzf /tmp/tmux.tar.gz \
     && rm /tmp/tmux.tar.gz
+RUN patch --batch --forward -p1 < /tmp/patches/0001-print-unknown-strftime-conversions-literally-under-fil-c.patch \
+    && patch --batch --forward -p1 < /tmp/patches/0002-reject-years-ctime-cannot-print-under-fil-c.patch \
+    && patch --batch --forward -p1 < /tmp/patches/0004-keep-equal-panes-in-list-order-under-fil-c.patch
 
 # sixel adds in-pane image support and utf8proc replaces tmux's built-in width
 # tables with the fuller ones above. systemd integration is deliberately absent:
@@ -183,6 +187,16 @@ RUN binary=/src/tmux \
     && "${binary}" -V > /tmp/tmux.version \
     && grep -Fq "tmux ${TMUX_VERSION}" /tmp/tmux.version
 
+# tmux 3.8's regression suite added scripts that drive the binary through Perl
+# and Python. util-linux supplies setpriv, used to run the socket-permission
+# regression as a non-root user. These remain test-only inputs.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        perl \
+        python3 \
+        util-linux \
+    && rm -rf /var/lib/apt/lists/*
+
 # tmux's release tarball ships no tests: its suite lives only in the git tree.
 # The same tag is fetched again as a source archive and only regress/ is taken
 # from it, which is how the unRAR build gets its fixture corpus. Both downloads
@@ -194,8 +208,9 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/tmux-tests.tar.gz \
     && mkdir -p /tmp/tmux-tests \
     && tar -C /tmp/tmux-tests --strip-components=1 -xzf /tmp/tmux-tests.tar.gz \
     && cp -a /tmp/tmux-tests/regress /src/regress \
+    && patch --batch --forward -d /src -p1 < /tmp/patches/0003-make-da-test-sixel-aware.patch \
     && rm -rf /tmp/tmux-tests /tmp/tmux-tests.tar.gz \
-    && test "$(find /src/regress -maxdepth 1 -name '*.sh' | wc -l)" -ge 30
+    && test "$(find /src/regress -maxdepth 1 -name '*.sh' | wc -l)" -ge 170
 
 # The suite is the gate: no artifact is produced unless every case passes. The
 # tests drive a real server, so each one is given a clean socket and a generous
@@ -219,9 +234,9 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/tmux-tests.tar.gz \
 # runner for the entire two-hour job budget, printing nothing, because the case
 # itself had already passed and only the cleanup was stuck. When the kill does
 # time out the socket is unlinked so the next case starts a fresh server rather
-# than queueing behind the wedged one. The whole suite finishes in about three
-# minutes on four processors, so a deadline well above that ends a stall with a
-# message instead of letting it consume the job.
+# than queueing behind the wedged one. tmux 3.8's larger suite takes roughly 25
+# minutes on a small runner, so a one-hour deadline ends a stall with a message
+# instead of consuming the job.
 #
 # Clear every socket rather than the one most cases use. Four cases open a
 # second server on -Ltest2, and tty-keys kills both at its own first line with
@@ -250,7 +265,7 @@ RUN set -e; \
     dump_filc() { \
         found=0; \
         for f in /src/regress/filc-log-*.txt /tmp/filc-log-*.txt; do \
-            [ -f "${f}" ] || continue; found=1; echo "== ${f}"; cat "${f}"; \
+            [ -s "${f}" ] || continue; found=1; echo "== ${f}"; cat "${f}"; \
         done; \
         if [ "${found}" -eq 0 ]; then \
             echo "(no Fil-C panic log: nothing aborted on a safety violation)"; \
@@ -263,9 +278,20 @@ RUN set -e; \
             rm -f "${sock}" 2>/dev/null || true; \
         done; \
     }; \
-    deadline=$(( $(date +%s) + 1500 )); \
-    pass=0; fail=0; flaky=""; failed=""; stalled=""; \
+    if ! setpriv --reuid=65534 --regid=65534 --clear-groups \
+            env TERM=screen HOME=/tmp TEST_TMUX=/src/tmux FILC_LOG_TO_FILE=1 \
+            timeout -k 10 120 sh server-socket-error.sh \
+            > /tmp/regress-server-socket-error.sh.log 2>&1; then \
+        echo "--- server-socket-error.sh (failed as uid 65534) ---"; \
+        cat /tmp/regress-server-socket-error.sh.log; \
+        echo "--- Fil-C panic log ---"; dump_filc; \
+        exit 1; \
+    fi; \
+    echo "server-socket-error.sh passed as uid 65534"; \
+    deadline=$(( $(date +%s) + 3600 )); \
+    pass=1; fail=0; flaky=""; failed=""; stalled=""; \
     for t in *.sh; do \
+        [ "${t}" = server-socket-error.sh ] && continue; \
         if [ "$(date +%s)" -ge "${deadline}" ]; then \
             echo "tmux regress: deadline exceeded with ${t} still to run"; exit 1; \
         fi; \
@@ -300,9 +326,37 @@ RUN set -e; \
     done; \
     if [ -n "${flaky}" ]; then echo "tmux regress: passed on retry:${flaky}"; fi; \
     if [ -n "${stalled}" ]; then echo "tmux regress: stalled, tolerated:${stalled}"; fi; \
+    if [ -n "${failed}" ]; then echo "tmux regress: failed:${failed}"; fi; \
     echo "tmux regress: ${pass} passed, ${fail} failed"; \
     test "${fail}" -eq 0; \
-    test "${pass}" -ge 30
+    test "${pass}" -ge 170
+
+# These focused checks keep the libc format compatibility behavior visible even
+# if upstream later reorganizes its regression scripts. The custom time format
+# at year 10000 must keep working: only ctime's fixed-width output is rejected.
+RUN set -e; \
+    export TERM=screen HOME=/root TZ=UTC FILC_LOG_TO_FILE=1; \
+    t() { timeout -k 5 30 /src/tmux -Lformat-compat -f /dev/null "$@"; }; \
+    expect() { \
+        expected="$1"; shift; \
+        actual="$(t "$@")" || { echo "FAIL: tmux $*" >&2; exit 1; }; \
+        if [ "${actual}" != "${expected}" ]; then \
+            printf 'FAIL: tmux %s: expected <%s>, got <%s>\n' \
+                "$*" "${expected}" "${actual}" >&2; \
+            exit 1; \
+        fi; \
+    }; \
+    t new-session -d; \
+    expect "50%" display-message -p '50%'; \
+    expect "a%0]b" display-message -p 'a%0]b'; \
+    expect 1 display-message -p '#{e|%%|:7,3}'; \
+    t set-option -g @y9999 253402300799; \
+    t set-option -g @y10000 253402300800; \
+    expect "[Fri Dec 31 23:59:59 9999]" display-message -p '[#{t:@y9999}]'; \
+    expect "[]" display-message -p '[#{t:@y10000}]'; \
+    expect "[zz]" display-message -p '[#{t/f/zz:@y10000}]'; \
+    expect alive display-message -p alive; \
+    timeout -k 5 15 /src/tmux -Lformat-compat -f /dev/null kill-server || true
 
 # The suite runs headless, so it never exercises the path a real client takes:
 # attaching hands the terminal's file descriptors to the server over a unix

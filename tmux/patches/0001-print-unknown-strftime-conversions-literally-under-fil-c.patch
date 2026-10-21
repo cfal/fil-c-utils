@@ -1,0 +1,63 @@
+From: fil-c-utils maintainers
+Subject: [PATCH] Print unknown strftime conversions literally under Fil-C
+
+musl's strftime returns 0 for any conversion specification it does not
+recognise; glibc copies such a specification through literally. tmux runs
+every time-expanded format (display-message, status lines, titles)
+through strftime before #{} expansion, so a stray % empties the whole
+string: the trailing % that %% leaves in #{e|%%|:7,3}, or a pane ID such
+as %0 in #[range=pane|%0]. When strftime fails, double the % of each
+specification musl does not accept and retry, which prints it as glibc
+does (without glibc's width padding of such literals).
+
+--- a/format.c
++++ b/format.c
+@@ -494 +494,47 @@
+-	return (strftime(s, max, fmt, tm));
++#ifdef __FILC__
++	const char	*cp, *spec;
++	char		*copy, *out;
++	size_t		 n;
++
++	/*
++	 * musl's strftime fails on any conversion it does not know, including
++	 * a trailing lone %, where glibc copies it literally. Formats are run
++	 * through strftime before #{} expansion, so a stray % such as the %%
++	 * left in #{e|%%|:...} or a pane ID like %0 in a status line would
++	 * otherwise empty the whole string. Double the % of each such
++	 * conversion and try again.
++	 */
++	n = strftime(s, max, fmt, tm);
++	if (n != 0 || *fmt == '\0')
++		return (n);
++	out = copy = xmalloc(2 * strlen(fmt) + 1);
++	for (cp = fmt; *cp != '\0'; cp++) {
++		if (*cp != '%') {
++			*out++ = *cp;
++			continue;
++		}
++		spec = cp++;
++		if (*cp == '-' || *cp == '_' || *cp == '0')
++			cp++;
++		if (*cp == '+')
++			cp++;
++		while (isdigit((u_char)*cp))
++			cp++;
++		if (*cp == 'E' || *cp == 'O')
++			cp++;
++		if (*cp == '\0' ||
++		    strchr("aAbBcCdDeFgGhHIjklmMnpPrRsStTuUVwWxXyYzZ%", *cp) == NULL)
++			*out++ = '%';
++		while (spec != cp)
++			*out++ = *spec++;
++		if (*cp == '\0')
++			break;
++		*out++ = *cp;
++	}
++	*out = '\0';
++	n = strftime(s, max, copy, tm);
++	free(copy);
++	return (n);
++#else
++	return (strftime(s, max, fmt, tm));
++#endif

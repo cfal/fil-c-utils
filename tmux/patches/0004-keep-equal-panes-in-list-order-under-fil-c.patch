@@ -1,0 +1,28 @@
+From: fil-c-utils maintainers
+Subject: [PATCH] Keep equal panes in pane list order under Fil-C
+
+Every tiled pane has the same z-index and panes usually share a title, so
+sort_pane_cmp returns 0 for them and their order is left to qsort. glibc
+(merge sort) and the BSDs (insertion sort for short arrays) keep such
+panes in input order, which for every caller is pane list order, and
+regress/format-modifiers.sh asserts that for both #{P/z:} (3012) and
+#{P/zr:} (0123). musl's smoothsort is not stable and gives 3102. Break
+the tie by pane index after any reversal, reproducing the stable order.
+
+--- a/sort.c
++++ b/sort.c
+@@ -247,0 +248,14 @@
++#ifdef __FILC__
++	/*
++	 * Panes can still compare equal (every tiled pane has the same
++	 * z-index and usually the same title). glibc's merge sort and the BSD
++	 * insertion sort keep them in pane list order whichever the direction,
++	 * which is what the regression tests expect; musl's smoothsort is not
++	 * stable, so make that order explicit, after any reversal.
++	 */
++	if (result == 0) {
++		window_pane_index(a, &ai);
++		window_pane_index(b, &bi);
++		result = sort_number_cmp(ai, bi);
++	}
++#endif

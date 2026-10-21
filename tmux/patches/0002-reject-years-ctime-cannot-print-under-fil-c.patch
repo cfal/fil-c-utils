@@ -1,0 +1,23 @@
+From: fil-c-utils maintainers
+Subject: [PATCH] Reject years ctime cannot print under Fil-C
+
+musl's asctime_r deliberately crashes when its ISO C format would not fit
+the 26-byte buffer, which is any year outside -999..9999; under Fil-C that
+is a null-pointer write panic that kills the server. glibc returns NULL
+with EOVERFLOW for exactly those years, so #{t:...} expands to nothing;
+check the local year first and do the same.
+
+--- a/format.c
++++ b/format.c
+@@ -4747,0 +4748,11 @@
++#ifdef __FILC__
++				/*
++				 * musl's asctime_r aborts if the result does
++				 * not fit in 26 bytes, so check the year it
++				 * would print first (glibc fails instead).
++				 */
++				if (localtime_r(&t, &tm) == NULL ||
++				    tm.tm_year < -999 - 1900 ||
++				    tm.tm_year > 9999 - 1900)
++					return (NULL);
++#endif
