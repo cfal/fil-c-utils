@@ -31,6 +31,8 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: |
+          python3 tests/test_check_versions.py
+
           # A zero exit means every pin is current; there is nothing to say.
           if report="$(python3 check-versions.py)"; then
             echo 'all pins are current'

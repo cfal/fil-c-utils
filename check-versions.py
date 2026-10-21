@@ -25,20 +25,20 @@ UA = "fil-c-utils-version-check"
 
 
 # --------------------------------------------------------------------- fetching
-def _get(url, headers=None):
+def _get(url, headers=None, *, timeout=TIMEOUT, retries=RETRIES):
     last = None
-    for attempt in range(RETRIES):
+    for attempt in range(retries):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": UA, **(headers or {})})
-            with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return resp.read()
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             last = exc
     raise RuntimeError(f"{url}: {last}")
 
 
-def get_text(url, headers=None):
-    return _get(url, headers).decode("utf-8", "replace")
+def get_text(url, headers=None, *, timeout=TIMEOUT, retries=RETRIES):
+    return _get(url, headers, timeout=timeout, retries=retries).decode("utf-8", "replace")
 
 
 def get_json(url):
@@ -90,8 +90,10 @@ def newest(versions):
 def github_latest(repo, strip="", underscores=False, series=None):
     """Newest non-prerelease tag for a GitHub repository.
 
-    Prefers the release marked "latest"; falls back to the tag list for
-    projects that publish releases without setting that flag.
+    Checks releases and tags together. Projects can publish a stable tag before
+    creating its GitHub release, so trusting only the latest-release pointer can
+    leave a newer tag unnoticed. Tags attached to prerelease or draft releases
+    are excluded even when their names look like stable numeric versions.
 
     `series` restricts the answer to one release line, for example "3." to stay
     within OpenSSL 3.x.  A pin deliberately held back still needs its own line
@@ -104,31 +106,51 @@ def github_latest(repo, strip="", underscores=False, series=None):
             tag = tag[len(strip):]
         return tag.replace("_", ".") if underscores else tag
 
-    try:
-        tag = get_json(f"https://api.github.com/repos/{repo}/releases/latest")["tag_name"]
-        version = norm(tag)
-        if is_stable(version) and (series is None or version.startswith(series)):
-            return version
-    except RuntimeError:
-        pass  # no "latest" release marked, or transient; try the tag list
+    releases = get_json(f"https://api.github.com/repos/{repo}/releases?per_page=100")
+    excluded_tags = {
+        release["tag_name"]
+        for release in releases
+        if release.get("draft") or release.get("prerelease")
+    }
+    versions = [
+        norm(release["tag_name"])
+        for release in releases
+        if release["tag_name"] not in excluded_tags
+    ]
 
-    tags = get_json(f"https://api.github.com/repos/{repo}/tags")
-    names = (norm(t["name"]) for t in tags)
+    tags = get_json(f"https://api.github.com/repos/{repo}/tags?per_page=100")
+    names = (norm(t["name"]) for t in tags if t["name"] not in excluded_tags)
     if series is not None:
         names = (n for n in names if n.startswith(series))
-    return newest(names)
+        versions = [v for v in versions if v.startswith(series)]
+    versions.extend(names)
+    return newest(versions)
 
 
 def gnu_ftp(name, directory=None):
     # libidn2 releases live in the gnu/libidn/ directory alongside libidn's, so
     # the listing to read and the file prefix to match are not always the same.
-    html = get_text(f"https://ftp.gnu.org/gnu/{directory or name}/")
+    directory = directory or name
+    try:
+        # The redirector should answer quickly. Give it one short attempt so a
+        # dead mirror cannot consume the workflow's entire ten-minute budget
+        # before the canonical fallback is tried for all GNU components.
+        html = get_text(
+            f"https://ftpmirror.gnu.org/{directory}/", timeout=10, retries=1
+        )
+    except RuntimeError:
+        html = get_text(f"https://ftp.gnu.org/gnu/{directory}/")
     return newest(re.findall(rf"{re.escape(name)}-(\d+(?:\.\d+)+)\.tar\.", html))
 
 
 def sourceware_bzip2():
     html = get_text("https://sourceware.org/pub/bzip2/")
     return newest(re.findall(r"bzip2-(\d+(?:\.\d+)+)\.tar\.gz", html))
+
+
+def astron_file():
+    html = get_text("https://astron.com/pub/file/")
+    return newest(re.findall(r"file-(\d+(?:\.\d+)+)\.tar\.gz", html))
 
 
 def rarlab_unrar():
@@ -203,6 +225,8 @@ COMPONENTS = [
     ("libevent", "tmux/Dockerfile", "LIBEVENT_VERSION", libevent_latest),
     ("utf8proc", "tmux/Dockerfile", "UTF8PROC_VERSION", lambda: github_latest("JuliaStrings/utf8proc", "v")),
     ("ncurses",  "tmux/Dockerfile", "NCURSES_VERSION",  lambda: gnu_ftp("ncurses")),
+    ("nano",  "nano/Dockerfile", "NANO_VERSION", lambda: gnu_ftp("nano")),
+    ("file",  "nano/Dockerfile", "FILE_VERSION", astron_file),
     ("git",   "git/Dockerfile", "GIT_VERSION",   lambda: github_latest("git/git", "v")),
     ("expat", "git/Dockerfile", "EXPAT_VERSION", expat_latest),
     ("openssh", "openssh-server/Dockerfile", "OPENSSH_VERSION", openbsd_openssh),
