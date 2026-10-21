@@ -10,6 +10,7 @@ upstream whose listing has changed shape, is reported as an error and the walk
 continues: a single unreachable host must not hide a stale pin somewhere else.
 Every component is always in the table.
 """
+import http.client
 import json
 import os
 import re
@@ -32,7 +33,12 @@ def _get(url, headers=None, *, timeout=TIMEOUT, retries=RETRIES):
             req = urllib.request.Request(url, headers={"User-Agent": UA, **(headers or {})})
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return resp.read()
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        except (
+            urllib.error.URLError,
+            http.client.HTTPException,
+            TimeoutError,
+            OSError,
+        ) as exc:
             last = exc
     raise RuntimeError(f"{url}: {last}")
 
@@ -131,16 +137,19 @@ def gnu_ftp(name, directory=None):
     # libidn2 releases live in the gnu/libidn/ directory alongside libidn's, so
     # the listing to read and the file prefix to match are not always the same.
     directory = directory or name
-    try:
-        # The redirector should answer quickly. Give it one short attempt so a
-        # dead mirror cannot consume the workflow's entire ten-minute budget
-        # before the canonical fallback is tried for all GNU components.
-        html = get_text(
-            f"https://ftpmirror.gnu.org/{directory}/", timeout=10, retries=1
-        )
-    except RuntimeError:
-        html = get_text(f"https://ftp.gnu.org/gnu/{directory}/")
-    return newest(re.findall(rf"{re.escape(name)}-(\d+(?:\.\d+)+)\.tar\.", html))
+    last = None
+    for url in (
+        f"https://ftp.gnu.org/gnu/{directory}/",
+        f"https://ftpmirror.gnu.org/{directory}/",
+    ):
+        try:
+            html = get_text(url, timeout=10, retries=1)
+            return newest(
+                re.findall(rf"{re.escape(name)}-(\d+(?:\.\d+)+)\.tar\.", html)
+            )
+        except RuntimeError as exc:
+            last = exc
+    raise RuntimeError(f"GNU listings failed: {last}")
 
 
 def sourceware_bzip2():

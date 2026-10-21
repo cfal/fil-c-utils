@@ -43,23 +43,52 @@ class GitHubLatestTests(unittest.TestCase):
 
 
 class GnuLatestTests(unittest.TestCase):
-    def test_mirror_uses_short_budget_before_canonical_fallback(self):
-        with mock.patch.object(
-            VERSIONS,
-            "get_text",
-            side_effect=[RuntimeError("mirror down"), "gzip-1.15.tar.xz"],
-        ) as get_text:
+    class Response:
+        def __init__(self, body):
+            self.body = body.encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return self.body
+
+    def test_canonical_uses_short_budget_before_mirror_fallback(self):
+        calls = []
+
+        def urlopen(request, timeout):
+            calls.append((request.full_url, timeout))
+            if request.full_url == "https://ftp.gnu.org/gnu/gzip/":
+                raise VERSIONS.http.client.BadStatusLine("bad response")
+            return self.Response("gzip-1.15.tar.xz")
+
+        with mock.patch.object(VERSIONS.urllib.request, "urlopen", side_effect=urlopen):
             self.assertEqual(VERSIONS.gnu_ftp("gzip"), "1.15")
 
         self.assertEqual(
-            get_text.call_args_list,
+            calls,
             [
-                mock.call(
-                    "https://ftpmirror.gnu.org/gzip/", timeout=10, retries=1
-                ),
-                mock.call("https://ftp.gnu.org/gnu/gzip/"),
+                ("https://ftp.gnu.org/gnu/gzip/", 10),
+                ("https://ftpmirror.gnu.org/gzip/", 10),
             ],
         )
+
+    def test_malformed_canonical_listing_uses_mirror(self):
+        responses = iter(
+            [self.Response("no release archives here"), self.Response("nano-9.2.tar.xz")]
+        )
+
+        with mock.patch.object(
+            VERSIONS.urllib.request,
+            "urlopen",
+            side_effect=lambda *_args, **_kwargs: next(responses),
+        ) as urlopen:
+            self.assertEqual(VERSIONS.gnu_ftp("nano"), "9.2")
+
+        self.assertEqual(urlopen.call_count, 2)
 
 
 if __name__ == "__main__":
