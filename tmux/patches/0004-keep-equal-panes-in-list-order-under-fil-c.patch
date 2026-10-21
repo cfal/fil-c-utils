@@ -11,10 +11,17 @@ the tie by pane index after any reversal, reproducing the stable order.
 
 --- a/sort.c
 +++ b/sort.c
-@@ -246,3 +246,17 @@
+@@ -243,7 +243,21 @@
+-	if (result == 0)
+-		result = strcmp(a->screen->title, b->screen->title);
+-
 -	if (sort_crit->reversed)
 -		result = -result;
 -	return (result);
+-}
++	if (result == 0)
++		result = strcmp(a->screen->title, b->screen->title);
++
 +	if (sort_crit->reversed)
 +		result = -result;
 +#ifdef __FILC__
@@ -32,3 +39,4 @@ the tie by pane index after any reversal, reproducing the stable order.
 +	}
 +#endif
 +	return (result);
++}
