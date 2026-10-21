@@ -279,8 +279,8 @@ RUN set -e; \
         done; \
     }; \
     if ! setpriv --reuid=65534 --regid=65534 --clear-groups \
-            env -u FILC_LOG_TO_FILE TERM=screen HOME=/tmp TEST_TMUX=/src/tmux \
-            timeout -k 10 120 sh server-socket-error.sh \
+            env TERM=screen HOME=/tmp TEST_TMUX=/src/tmux FILC_LOG_TO_FILE=1 \
+            sh -c 'cd /tmp && exec timeout -k 10 120 sh /src/regress/server-socket-error.sh' \
             > /tmp/regress-server-socket-error.sh.log 2>&1; then \
         echo "--- server-socket-error.sh (failed as uid 65534) ---"; \
         cat /tmp/regress-server-socket-error.sh.log; \
@@ -336,22 +336,32 @@ RUN set -e; \
 # at year 10000 must keep working: only ctime's fixed-width output is rejected.
 RUN set -e; \
     export TERM=screen HOME=/root TZ=UTC FILC_LOG_TO_FILE=1; \
+    dump_filc() { \
+        found=0; \
+        for f in /src/filc-log-*.txt; do \
+            [ -s "${f}" ] || continue; found=1; echo "== ${f}"; cat "${f}"; \
+        done; \
+        if [ "${found}" -eq 0 ]; then echo "(no Fil-C panic log)"; fi; \
+    }; \
+    fail() { echo "FAIL: $*" >&2; dump_filc >&2; exit 1; }; \
     t() { timeout -k 5 30 /src/tmux -Lformat-compat -f /dev/null "$@"; }; \
     expect() { \
         expected="$1"; shift; \
-        actual="$(t "$@")" || { echo "FAIL: tmux $*" >&2; exit 1; }; \
+        actual="$(t "$@")" || fail "tmux $*"; \
         if [ "${actual}" != "${expected}" ]; then \
             printf 'FAIL: tmux %s: expected <%s>, got <%s>\n' \
                 "$*" "${expected}" "${actual}" >&2; \
+            dump_filc >&2; \
             exit 1; \
         fi; \
     }; \
-    t new-session -d; \
+    rm -f /src/filc-log-*.txt; \
+    t new-session -d || fail "tmux new-session -d"; \
     expect "50%" display-message -p '50%'; \
     expect "a%0]b" display-message -p 'a%0]b'; \
     expect 1 display-message -p '#{e|%%|:7,3}'; \
-    t set-option -g @y9999 253402300799; \
-    t set-option -g @y10000 253402300800; \
+    t set-option -g @y9999 253402300799 || fail "tmux set-option @y9999"; \
+    t set-option -g @y10000 253402300800 || fail "tmux set-option @y10000"; \
     expect "[Fri Dec 31 23:59:59 9999]" display-message -p '[#{t:@y9999}]'; \
     expect "[]" display-message -p '[#{t:@y10000}]'; \
     expect "[zz]" display-message -p '[#{t/f/zz:@y10000}]'; \

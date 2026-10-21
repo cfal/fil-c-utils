@@ -11,7 +11,12 @@ the tie by pane index after any reversal, reproducing the stable order.
 
 --- a/sort.c
 +++ b/sort.c
-@@ -247,0 +248,14 @@
+@@ -246,3 +246,17 @@
+-	if (sort_crit->reversed)
+-		result = -result;
+-	return (result);
++	if (sort_crit->reversed)
++		result = -result;
 +#ifdef __FILC__
 +	/*
 +	 * Panes can still compare equal (every tiled pane has the same
@@ -26,3 +31,4 @@ the tie by pane index after any reversal, reproducing the stable order.
 +		result = sort_number_cmp(ai, bi);
 +	}
 +#endif
++	return (result);

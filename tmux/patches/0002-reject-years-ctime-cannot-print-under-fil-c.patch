@@ -9,7 +9,7 @@ check the local year first and do the same.
 
 --- a/format.c
 +++ b/format.c
-@@ -4747,0 +4748,11 @@
+@@ -4748,2 +4748,13 @@
 +#ifdef __FILC__
 +				/*
 +				 * musl's asctime_r aborts if the result does
@@ -21,3 +21,7 @@ check the local year first and do the same.
 +				    tm.tm_year > 9999 - 1900)
 +					return (NULL);
 +#endif
+-				if (ctime_r(&t, s) == NULL)
+-					return (NULL);
++				if (ctime_r(&t, s) == NULL)
++					return (NULL);
