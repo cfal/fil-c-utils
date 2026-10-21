@@ -7,8 +7,8 @@ ARG ZLIB_VERSION=1.3.2
 ARG ZLIB_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
 ARG OPENSSL_VERSION=4.0.3
 ARG OPENSSL_SHA256=325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9
-ARG CURL_VERSION=8.22.0
-ARG CURL_SHA256=f7ef3ae8a22e521f289803fe93543eb64c329b58aa73a9e224dfd915a2a5f4f7
+ARG CURL_VERSION=8.23.0
+ARG CURL_SHA256=8dadd7d2536a314f982ad05a651b713f426bf7d02cc2c76cffb9796f2218e6c5
 
 FROM ubuntu:24.04 AS build
 
@@ -177,8 +177,8 @@ RUN binary=/src/src/curl \
 # ends of every connection rather than only on the client.
 #
 # stunnel is what makes the TLS cases runnable. Without it curl's suite skips
-# 62 HTTPS tests and still reports success, which for a network client would
-# leave the most important paths untested while looking healthy.
+# HTTPS tests and still reports success, which for a network client would leave
+# the most important paths untested while looking healthy.
 #
 # The run is checked two ways. runtests.pl must succeed, and a floor is placed
 # under the number of cases that actually ran, because a configuration change

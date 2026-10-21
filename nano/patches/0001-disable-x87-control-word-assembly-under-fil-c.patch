@@ -9,7 +9,7 @@ unnecessary.
 
 --- a/lib/fpucw.h
 +++ b/lib/fpucw.h
-@@ -65,7 +65,8 @@ extern "C" {
+@@ -67,7 +67,8 @@ extern "C" {
  
  
  /* Inline assembler like this works only with GNU C and clang.  */

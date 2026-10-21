@@ -1,0 +1,16 @@
+From: Nicholas Marriott <nicholas.marriott@gmail.com>
+Subject: [PATCH] Fix DA test with sixel enabled
+
+Backport upstream commit 58eb73a6d1bac0919f3f264c057e4c7b4348f9e4,
+using the tmux 3.8 sixel_support format variable. A sixel-capable terminal
+advertises private mode 4 in its primary device attributes response.
+
+--- a/regress/input-replies.sh
++++ b/regress/input-replies.sh
+@@ -63 +63,5 @@
+-query "da-primary" '^[[?1;2c' '\033[c' 7 ''
++if [ "$($TMUX display-message -p '#{sixel_support}')" = 1 ]; then
++	query "da-primary" '^[[?1;2;4c' '\033[c' 9 ''
++else
++	query "da-primary" '^[[?1;2c' '\033[c' 7 ''
++fi
