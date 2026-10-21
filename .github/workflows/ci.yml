@@ -1,6 +1,6 @@
 name: ci
 
-# build (x86_64 and aarch64) -> test -> bundle -> release.
+# version checker tests -> build (x86_64 and aarch64) -> test -> bundle -> release.
 #
 # The test suite runs against the binaries that were just compiled, so it
 # cannot run before the build. Gating therefore sits on the bundle: nothing is
