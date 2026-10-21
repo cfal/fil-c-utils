@@ -903,6 +903,7 @@ recovery.
 │   └── patches/
 └── tests/
     ├── run-tests.sh
+    ├── test_check_versions.py
     ├── lib.sh
     ├── make-seed.py
     ├── make-corpus.sh
@@ -981,9 +982,9 @@ The `COMPONENTS` table is explicit rather than discovered from Dockerfile
 arguments. Every upstream has a different release source, so each registered
 component uses its project's authoritative release API or listing: GitHub,
 Sourceware, RARLab, the OpenBSD CDN, or astron.com's `file` archive. GNU
-lookups use its mirror redirector with `ftp.gnu.org` as a bounded fallback. A
-new maintained release pin needs a table entry and an upstream-specific lookup
-or it will not receive freshness reports.
+lookups use canonical `ftp.gnu.org` first, with its mirror redirector as a
+bounded fallback. A new maintained release pin needs a table entry and an
+upstream-specific lookup or it will not receive freshness reports.
 
 The check never stops at the first problem. A component whose upstream is
 unreachable, or whose listing has changed shape, is reported as an error and
@@ -992,6 +993,7 @@ It runs locally the same way, where it does exit nonzero if anything is behind,
 so it works as a plain command as well as a source of comment text:
 
 ```sh
+python3 tests/test_check_versions.py
 python3 check-versions.py
 ```
 
@@ -1237,8 +1239,10 @@ tests, and live default key exchange cover them.
 
 ### Updating a dependency
 
-Run `python3 check-versions.py` to see which pins are behind; the `versions`
-workflow runs the same check when a pull request is opened and comments if any
+Run `python3 tests/test_check_versions.py` to verify the lookup logic, then
+`python3 check-versions.py` to see which pins are behind. The `ci` workflow
+runs the unit tests on every pull-request update and main push; the `versions`
+workflow runs the live check when a pull request is opened and comments if any
 are.
 
 1. Change the version and checksum arguments near the top of its Dockerfile.
