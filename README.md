@@ -376,9 +376,9 @@ delicate, and every one of them runs against the Fil-C binary.
 | Utility | Upstream suite | Result under Fil-C |
 | --- | --- | --- |
 | GNU tar | Autotest, 226 files | 208 pass, 36 skip |
-| curl | 1664 enabled cases | 1664 pass |
+| curl | 1712 enabled cases | 1712 pass |
 | GNU Wget | `tests/` + `testenv/`, 136 cases | 134 pass, 2 skip |
-| tmux | `regress/`, 35 cases (git only) | 35 pass |
+| tmux | `regress/`, 174 cases (git only) | 174 pass |
 | gzip | 34 cases | 33 pass, 1 skip |
 | XZ Utils | 21 cases | 21 pass |
 | Zstandard | `playTests.sh` and fuzzers | all pass |
@@ -432,7 +432,7 @@ also proves the terminal descriptions compiled into the binary are what let it
 run where the scratch image has no terminfo on disk.
 
 tmux's release tarball ships no tests either, but unlike nano its suite does
-exist: the 35 scripts in `regress/` live only in the git tree. The build fetches
+exist: the 174 scripts in `regress/` live only in the git tree. The build fetches
 the same tag a second time as a source archive and takes only that directory,
 which is how the unRAR build gets its fixture corpus, and runs the tests against
 the binary already built. Two further checks cover what a headless suite cannot.
@@ -443,8 +443,18 @@ pane. Separately, every terminfo database on the build image is moved aside and
 a session is started with none, which proves the compiled-in descriptions rather
 than the builder's own database are doing the work.
 
-Four details are easy to get wrong. curl's suite silently skips its 62 HTTPS
-cases unless `stunnel4` is installed, and zstd's re-links the CLI, so it needs
+tmux has three libc compatibility fixes scoped to Fil-C. Time-expanded strings
+escape conversion specifications musl does not recognize, so literal tmux pane
+IDs such as `%0` behave as they do with glibc instead of blanking a status line.
+Plain `ctime` expansion rejects years outside musl's printable range before its
+`asctime_r` abort path, while custom time formats keep working. Finally, panes
+with equal sort keys use pane-list order rather than musl's unstable `qsort`
+permutation. Exact upstream regressions and focused format checks cover all
+three paths. The sixel-enabled build also adjusts the suite's primary device
+attributes expectation to include the sixel capability it deliberately enables.
+
+Four details are easy to get wrong. curl's suite silently skips its HTTPS cases
+unless `stunnel4` is installed, and zstd's re-links the CLI, so it needs
 the same flags as the build or it fails to link rather than testing anything.
 Wget's HTTPS tests name their server `WgetTestingServer` and map it to
 localhost through `HOSTALIASES`, a glibc feature the musl client ignores; the
@@ -690,21 +700,21 @@ than content-addressed image digests.
 | bzip2 source | 1.0.8 | `ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269` |
 | XZ Utils source | 5.8.4 | `4ce24038fd4221e0d13bc1a2de7a4db56e90b92b3bf75321f6c14be73f65de4b` |
 | Zstandard source | 1.5.7 | `eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3` |
-| curl source | 8.22.0 | `f7ef3ae8a22e521f289803fe93543eb64c329b58aa73a9e224dfd915a2a5f4f7` |
+| curl source | 8.23.0 | `8dadd7d2536a314f982ad05a651b713f426bf7d02cc2c76cffb9796f2218e6c5` |
 | GNU Wget source | 1.25.0 | `766e48423e79359ea31e41db9e5c289675947a7fcf2efdcedb726ac9d0da3784` |
 | OpenSSL source (curl, git, OpenSSH) | 4.0.3 | `325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9` |
 | OpenSSL source (wget) | 3.6.5 | `a2157c2830efdec3788939b00c9b0638306d3f0bbb76dc4832ee503bb397df98` |
 | zlib source | 1.3.2 | `bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16` |
-| libunistring source | 1.4.2 | `5b46e74377ed7409c5b75e7a96f95377b095623b689d8522620927964a41499c` |
+| libunistring source | 1.5 | `fe89007a8a414ae4790b816b86859e877d3ab135db3c37f06541ff7e85ac344b` |
 | libidn2 source | 2.3.8 | `f557911bf6171621e1f72ff35f5b1825bb35b52ed45325dcdee931e5d3c0787a` |
 | libpsl source | 0.23.3 | `93941f85a1e7bd593fa94f299233cb5dfc91cd144fd9a78a6ceb75001c5b03be` |
 | PCRE2 source | 10.49 | `929f0b20e62879252a15886b06c89f1edef61a363cbd5826fb041080a5e557ae` |
-| c-ares source | 1.34.8 | `c222b6d681096f9444d2c4863d2c1174019e27cacca0a4a5c114d36dd7d7bf78` |
-| GNU nano source | 9.1 | `5f47764274cb7532349ce0aa20ec10f1e8e851a6e9fa3eb66812c43d196db042` |
+| c-ares source | 1.34.9 | `9364b70a12eb59a06830fb488d9357f90100dff0d98b23ea3593a183d43e6f2f` |
+| GNU nano source | 9.2 | `05ecb99247b782e8a5b3a25ed4101dd034b0236902f7449bc9795b717642f7e9` |
 | ncurses source | 6.6 | `355b4cbbed880b0381a04c46617b7656e362585d52e9cf84a67e2009b749ff11` |
-| file source | 5.46 | `c9cc77c7c560c543135edc555af609d5619dbef011997e988ce40a3d75d86088` |
-| tmux source | 3.7c | `7c60cae9a0e25288e2e24750aafc9e8800fc7fd4555e447e1b29ee4201cfb3bf` |
-| tmux tests (git tag) | 3.7c | `5e7b0f533b66e5633e2b72a9d483f9534a343ab7011eb2621b6309dfba553daa` |
+| file source | 5.48 | `ed14656883b23a364b4057c05595d93252da9bc473d30106519519d0da141283` |
+| tmux source | 3.8 | `e79c699c7e949dccd0a4a125e17b8d1261e311b16979dbc8eb34542f3966d82e` |
+| tmux tests (git tag) | 3.8 | `f873f9379c9cf30d3d66b642a955118c4fbb0019d046d13e6012340811e5dcb7` |
 | libevent source | 2.1.13 | `f7e9383b8c0baa81b687e5b5eecc01beefaf1b19b64151d95ed61647fe7a315c` |
 | utf8proc source | 2.12.0 | `a393fbef160835fb315bc3e91ba8d86f7a73a7cec9e6198b6c60b848b498bfeb` |
 | Git source | 2.56.0 | `26c56c296b38c0695b26fa95f475f1d01704d2d38e73465ca30b0b2f5dc789d3` |
@@ -879,7 +889,8 @@ recovery.
 │   ├── Dockerfile
 │   └── patches/
 ├── tmux/
-│   └── Dockerfile
+│   ├── Dockerfile
+│   └── patches/
 ├── unrar/
 │   ├── Dockerfile
 │   └── patches/
@@ -969,9 +980,10 @@ curl       8.19.0     8.21.0     OUTDATED
 The `COMPONENTS` table is explicit rather than discovered from Dockerfile
 arguments. Every upstream has a different release source, so each registered
 component uses its project's authoritative release API or listing: GitHub,
-GNU, Sourceware, RARLab, or the OpenBSD CDN. A new maintained release pin needs
-a table entry and an upstream-specific lookup or it will not receive freshness
-reports.
+Sourceware, RARLab, the OpenBSD CDN, or astron.com's `file` archive. GNU
+lookups use its mirror redirector with `ftp.gnu.org` as a bounded fallback. A
+new maintained release pin needs a table entry and an upstream-specific lookup
+or it will not receive freshness reports.
 
 The check never stops at the first problem. A component whose upstream is
 unreachable, or whose listing has changed shape, is reported as an error and
@@ -1202,6 +1214,12 @@ the shared library too. The upstream reference build, `build_tmux.sh` in the
 Fil-C tree, is dynamic and installs into a prefix that already holds ncurses
 and libevent, so the static link and the terminfo question are this build's own
 work rather than something inherited from it.
+
+Three tmux source paths are patched for Fil-C's musl libc: unknown `strftime`
+conversions are preserved literally, plain `ctime` rejects years its fixed
+buffer cannot print, and pane sorts make equal-key list order explicit instead
+of relying on libc `qsort` stability. Each patch has a focused assertion or an
+upstream regression that fails without it.
 
 OpenSSH locks Fil-C's collector and allocator threads before installing its
 preauthentication seccomp filter, then allows the runtime's `sched_yield` and
