@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import importlib.util
+import re
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -40,6 +41,30 @@ class GitHubLatestTests(unittest.TestCase):
 
         with mock.patch.object(VERSIONS, "get_json", side_effect=response):
             self.assertEqual(VERSIONS.github_latest("example/project"), "26.05")
+
+    def test_series_restricts_releases_and_tags(self):
+        def response(url):
+            if "/releases?" in url:
+                return [
+                    {"tag_name": "openssl-4.0.4", "draft": False, "prerelease": False},
+                    {"tag_name": "openssl-3.6.6", "draft": False, "prerelease": True},
+                    {"tag_name": "openssl-3.6.5", "draft": False, "prerelease": False},
+                ]
+            if "/tags?" in url:
+                return [
+                    {"name": "openssl-4.0.5"},
+                    {"name": "openssl-3.6.6"},
+                    {"name": "openssl-3.6.5"},
+                ]
+            self.fail(f"unexpected URL: {url}")
+
+        with mock.patch.object(VERSIONS, "get_json", side_effect=response):
+            self.assertEqual(
+                VERSIONS.github_latest(
+                    "openssl/openssl", strip="openssl-", series="3."
+                ),
+                "3.6.5",
+            )
 
 
 class GnuLatestTests(unittest.TestCase):
@@ -89,6 +114,52 @@ class GnuLatestTests(unittest.TestCase):
             self.assertEqual(VERSIONS.gnu_ftp("nano"), "9.2")
 
         self.assertEqual(urlopen.call_count, 2)
+
+
+class RegistrationTests(unittest.TestCase):
+    def test_every_maintained_version_argument_is_registered(self):
+        found = set()
+        for dockerfile in ROOT.glob("*/Dockerfile"):
+            found.update(
+                re.findall(
+                    r"^ARG ([A-Z0-9_]+_VERSION)=",
+                    dockerfile.read_text(),
+                    flags=re.MULTILINE,
+                )
+            )
+
+        registered = {component[2] for component in VERSIONS.COMPONENTS}
+        intentionally_unregistered = {"FILC_VERSION", "SEVENZIP_ARCHIVE_VERSION"}
+        self.assertEqual(found - registered - intentionally_unregistered, set())
+
+    def test_shared_pins_stay_synchronized(self):
+        groups = {
+            "CURL_VERSION": ["curl/Dockerfile", "git/Dockerfile"],
+            "ZLIB_VERSION": [
+                "curl/Dockerfile",
+                "git/Dockerfile",
+                "openssh-server/Dockerfile",
+                "wget/Dockerfile",
+            ],
+            "OPENSSL_VERSION": [
+                "curl/Dockerfile",
+                "git/Dockerfile",
+                "openssh-server/Dockerfile",
+            ],
+            "PCRE2_VERSION": ["git/Dockerfile", "wget/Dockerfile"],
+            "NCURSES_VERSION": ["nano/Dockerfile", "tmux/Dockerfile"],
+        }
+        for argument, paths in groups.items():
+            with self.subTest(argument=argument):
+                values = {
+                    re.search(
+                        rf"^ARG {argument}=(.+)$",
+                        (ROOT / path).read_text(),
+                        flags=re.MULTILINE,
+                    ).group(1)
+                    for path in paths
+                }
+                self.assertEqual(len(values), 1)
 
 
 if __name__ == "__main__":
