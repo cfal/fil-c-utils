@@ -694,7 +694,7 @@ than content-addressed image digests.
 | Fil-C (x86_64) | 0.687 | `aab538401f78a47ab261ee79afed8c6b99e1d4848e263ae159a75b03c1288da1` |
 | Fil-C (aarch64) | 0.687 | `f1337799051664f93c7712141deaebe78571ae96ffcf05563d517b89440bcbc0` |
 | 7-Zip source | 26.05 | `0b6080b8c3e7a579161d2d495224c0e51c467576cb4c7048b0ab485ef44cc22e` |
-| unRAR source | 7.3.1 | `634900842a3737d9cc15bbcc71d4c74cc713437e0bca296a573424fe5f2660ab` |
+| unRAR source | 7.3.2 | `f61a1160d6e2ebbda2ad353c8e82f62ab4312f97fde23c6c2c982d25e0014f99` |
 | GNU tar source | 1.35 | `4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16` |
 | GNU gzip source | 1.15 | `9aa0cc780dec156b8282844833b342ab7cb08c25d2cd9a1869cdd0df31deff48` |
 | bzip2 source | 1.0.8 | `ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269` |
