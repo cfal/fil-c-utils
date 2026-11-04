@@ -9,10 +9,8 @@ This also checks CN constraints on certificates that have a SAN.
 
 --- a/lib/vtls/openssl.c
 +++ b/lib/vtls/openssl.c
-@@ -3944,6 +3944,15 @@
-    * We then explicitly check the result and may try alternatives like
+@@ -3945,2 +3945,11 @@
     * Apple's SecTrust for verification. */
-   SSL_CTX_set_verify(octx->ssl_ctx, SSL_VERIFY_NONE, NULL);
 +#if OPENSSL_VERSION_NUMBER >= 0x40100000L
 +  {
 +    X509_VERIFY_PARAM *param = SSL_CTX_get0_param(octx->ssl_ctx);
@@ -22,6 +20,4 @@ This also checks CN constraints on certificates that have a SAN.
 +      X509_CHECK_FLAG_ALWAYS_CHECK_SUBJECT);
 +  }
 +#endif
- 
-   /* Enable logging of secrets to the file specified in env SSLKEYLOGFILE. */
- #if !defined(HAVE_KEYLOG_UPSTREAM) && defined(HAVE_KEYLOG_CALLBACK)
+   SSL_CTX_set_verify(octx->ssl_ctx, SSL_VERIFY_NONE, NULL);
