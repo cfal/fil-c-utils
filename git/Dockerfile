@@ -5,15 +5,15 @@ ARG FILC_X86_64_SHA256=aab538401f78a47ab261ee79afed8c6b99e1d4848e263ae159a75b03c
 ARG FILC_AARCH64_SHA256=f1337799051664f93c7712141deaebe78571ae96ffcf05563d517b89440bcbc0
 ARG ZLIB_VERSION=1.3.2
 ARG ZLIB_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
-ARG OPENSSL_VERSION=4.0.3
-ARG OPENSSL_SHA256=325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9
+ARG OPENSSL_VERSION=4.1.0
+ARG OPENSSL_SHA256=50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd
 ARG CURL_VERSION=8.23.0
 ARG CURL_SHA256=8dadd7d2536a314f982ad05a651b713f426bf7d02cc2c76cffb9796f2218e6c5
 ARG PCRE2_VERSION=10.49
 ARG PCRE2_SHA256=929f0b20e62879252a15886b06c89f1edef61a363cbd5826fb041080a5e557ae
-ARG EXPAT_VERSION=2.9.0
-ARG EXPAT_TAG=R_2_9_0
-ARG EXPAT_SHA256=16afbb9cefead2aa278105cf27d9f597bde7fbf3dbb85015857ca7ca6a4e89ba
+ARG EXPAT_VERSION=2.10.0
+ARG EXPAT_TAG=R_2_10_0
+ARG EXPAT_SHA256=5466a341f9c692ef7a958a6881311be597f8e1ce345984cf78414f54793dea4c
 ARG GIT_TEST_JOBS=
 ARG GIT_VERSION=2.56.0
 ARG GIT_SHA256=26c56c296b38c0695b26fa95f475f1d01704d2d38e73465ca30b0b2f5dc789d3
@@ -60,6 +60,7 @@ RUN apt-get update \
         libc6-dev \
         linux-libc-dev \
         make \
+        openssl \
         patch \
         patchelf \
         perl \
@@ -156,6 +157,8 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/curl.tar.xz \
     && echo "${CURL_SHA256}  /tmp/curl.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/curl.tar.xz \
     && rm /tmp/curl.tar.xz
+COPY patches/0002-enforce-cn-name-constraints-with-openssl-4.1.patch /tmp/curl-name-constraints.patch
+RUN patch --batch --forward -p1 < /tmp/curl-name-constraints.patch
 RUN CFLAGS="-O2 -g" LDFLAGS="-L/deps/lib" ./configure \
         --disable-shared --enable-static --prefix=/deps \
         --with-openssl=/deps --with-zlib=/deps \
@@ -554,6 +557,9 @@ RUN set -e; \
     if [ "${ok}" != yes ]; then echo "HTTPS check failed:"; cat /tmp/tls.err; exit 1; fi; \
     test -e /tmp/tls-clone/.git; \
     echo "git clones over HTTPS using the system trust store"
+
+COPY test-name-constraints.py /tests/test-name-constraints.py
+RUN python3 /tests/test-name-constraints.py git /artifact/bin/git
 
 FROM scratch AS artifact
 

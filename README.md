@@ -376,7 +376,7 @@ delicate, and every one of them runs against the Fil-C binary.
 | Utility | Upstream suite | Result under Fil-C |
 | --- | --- | --- |
 | GNU tar | Autotest, 226 files | 208 pass, 36 skip |
-| curl | 1712 enabled cases | 1712 pass |
+| curl | 1715 enabled cases | 1715 pass |
 | GNU Wget | `tests/` + `testenv/`, 136 cases | 134 pass, 2 skip |
 | tmux | `regress/`, 174 cases (git only) | 174 pass |
 | gzip | 34 cases | 33 pass, 1 skip |
@@ -693,8 +693,8 @@ than content-addressed image digests.
 | --- | --- | --- |
 | Fil-C (x86_64) | 0.687 | `aab538401f78a47ab261ee79afed8c6b99e1d4848e263ae159a75b03c1288da1` |
 | Fil-C (aarch64) | 0.687 | `f1337799051664f93c7712141deaebe78571ae96ffcf05563d517b89440bcbc0` |
-| 7-Zip source | 26.04 | `9691944c0fe0d01bb49373a704fb983fd33bc98b1738695179dfbf99ac1734f6` |
-| unRAR source | 7.3.1 | `634900842a3737d9cc15bbcc71d4c74cc713437e0bca296a573424fe5f2660ab` |
+| 7-Zip source | 26.05 | `0b6080b8c3e7a579161d2d495224c0e51c467576cb4c7048b0ab485ef44cc22e` |
+| unRAR source | 7.3.2 | `f61a1160d6e2ebbda2ad353c8e82f62ab4312f97fde23c6c2c982d25e0014f99` |
 | GNU tar source | 1.35 | `4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16` |
 | GNU gzip source | 1.15 | `9aa0cc780dec156b8282844833b342ab7cb08c25d2cd9a1869cdd0df31deff48` |
 | bzip2 source | 1.0.8 | `ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269` |
@@ -702,7 +702,7 @@ than content-addressed image digests.
 | Zstandard source | 1.5.7 | `eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3` |
 | curl source | 8.23.0 | `8dadd7d2536a314f982ad05a651b713f426bf7d02cc2c76cffb9796f2218e6c5` |
 | GNU Wget source | 1.25.0 | `766e48423e79359ea31e41db9e5c289675947a7fcf2efdcedb726ac9d0da3784` |
-| OpenSSL source (curl, git, OpenSSH) | 4.0.3 | `325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9` |
+| OpenSSL source (curl, git, OpenSSH) | 4.1.0 | `50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd` |
 | OpenSSL source (wget) | 3.6.5 | `a2157c2830efdec3788939b00c9b0638306d3f0bbb76dc4832ee503bb397df98` |
 | zlib source | 1.3.2 | `bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16` |
 | libunistring source | 1.5 | `fe89007a8a414ae4790b816b86859e877d3ab135db3c37f06541ff7e85ac344b` |
@@ -710,7 +710,7 @@ than content-addressed image digests.
 | libpsl source | 0.23.3 | `93941f85a1e7bd593fa94f299233cb5dfc91cd144fd9a78a6ceb75001c5b03be` |
 | PCRE2 source | 10.49 | `929f0b20e62879252a15886b06c89f1edef61a363cbd5826fb041080a5e557ae` |
 | c-ares source | 1.34.9 | `9364b70a12eb59a06830fb488d9357f90100dff0d98b23ea3593a183d43e6f2f` |
-| GNU nano source | 9.2 | `05ecb99247b782e8a5b3a25ed4101dd034b0236902f7449bc9795b717642f7e9` |
+| GNU nano source | 9.3 | `a9affc52c9596ee0682bcdd4ceb3c0b235eb221d83d733dfd9b0dff45897cb0d` |
 | ncurses source | 6.6 | `355b4cbbed880b0381a04c46617b7656e362585d52e9cf84a67e2009b749ff11` |
 | file source | 5.48 | `ed14656883b23a364b4057c05595d93252da9bc473d30106519519d0da141283` |
 | tmux source | 3.8 | `e79c699c7e949dccd0a4a125e17b8d1261e311b16979dbc8eb34542f3966d82e` |
@@ -718,7 +718,7 @@ than content-addressed image digests.
 | libevent source | 2.1.13 | `f7e9383b8c0baa81b687e5b5eecc01beefaf1b19b64151d95ed61647fe7a315c` |
 | utf8proc source | 2.12.0 | `a393fbef160835fb315bc3e91ba8d86f7a73a7cec9e6198b6c60b848b498bfeb` |
 | Git source | 2.56.0 | `26c56c296b38c0695b26fa95f475f1d01704d2d38e73465ca30b0b2f5dc789d3` |
-| Expat source | 2.9.0 | `16afbb9cefead2aa278105cf27d9f597bde7fbf3dbb85015857ca7ca6a4e89ba` |
+| Expat source | 2.10.0 | `5466a341f9c692ef7a958a6881311be597f8e1ce345984cf78414f54793dea4c` |
 | OpenSSH portable source | 10.6p1 | `a9dc9565dffe8640f64d863cd29a32bc4a3dbdec0566a7fc44c5d6ee767d5f39` |
 
 The Dockerfile frontend, Ubuntu base image, and Ubuntu packages installed in
@@ -872,9 +872,12 @@ recovery.
 ├── bzip2/
 │   └── Dockerfile
 ├── curl/
-│   └── Dockerfile
+│   ├── Dockerfile
+│   ├── test-name-constraints.py
+│   └── patches/
 ├── git/
 │   ├── Dockerfile
+│   ├── test-name-constraints.py
 │   └── patches/
 ├── gzip/
 │   └── Dockerfile
@@ -1120,10 +1123,10 @@ nano vendors gnulib's x87 control-word helper. On x86-64 its long-double
 formatting path normally saves and restores the precision control with inline
 `fnstcw` and `fldcw`, whose memory operands Fil-C turns into run-time traps.
 Fil-C's musl fenv implementation cannot change x87 precision, so the default
-extended precision remains in effect. A scoped patch omits the redundant save
-and restore under Fil-C. gzip 1.15 no longer vendors that helper, so it needs no
-equivalent patch. Both Dockerfiles reject the compiler's trap marker if any
-unsupported inline assembly remains.
+extended precision remains in effect. nano 9.3's gnulib already omits the
+redundant save and restore under Fil-C, so no local patch is needed. gzip 1.15
+no longer vendors that helper either. Both Dockerfiles reject the compiler's
+trap marker if any unsupported inline assembly remains.
 
 gzip 1.15 also moved `<signal.h>` below `gzip.h`, which defines a legacy `head`
 macro. Pizfix's AArch64 signal-context structs use the same field name, so a
@@ -1153,6 +1156,20 @@ x86-64 while curl derives `-L<prefix>/lib` from `--with-openssl`, and the
 mismatch fails the static link with a bare `cannot find -lssl`; and
 `make install_ssldirs` has to follow `install_sw`, or `openssl.cnf` is missing
 and the build's own TLS test cannot generate a certificate.
+
+curl 8.23 still implements common-name hostname fallback itself, while OpenSSL
+4.1 no longer checks DNS name constraints on the subject without an explicit
+opt-in. Both libcurl builds (curl and git) set
+`X509_CHECK_FLAG_ALWAYS_CHECK_SUBJECT` so a constrained CA cannot authenticate
+a CN-only certificate outside its permitted names. This also enforces CN
+constraints when a SAN is present, so a constrained certificate needs both
+names to be permitted. Each build generates a local constrained-CA fixture
+and exercises its shipped, stripped client: permitted CN and SAN certificates
+must work, while forbidden CN, SAN, and mixed CN/SAN certificates must fail
+with a certificate-verification error. A hostname-mismatch case also requires
+SAN matching to take precedence over a matching CN. The fixture scripts and
+libcurl patches are duplicated to keep the two Docker build contexts
+self-contained.
 
 curl needs the same libtool treatment as XZ, for the same reason: a plain
 `-static` yields a dynamically loaded Fil-C executable, and `-Wc,-static` at

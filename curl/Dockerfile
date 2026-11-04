@@ -5,8 +5,8 @@ ARG FILC_X86_64_SHA256=aab538401f78a47ab261ee79afed8c6b99e1d4848e263ae159a75b03c
 ARG FILC_AARCH64_SHA256=f1337799051664f93c7712141deaebe78571ae96ffcf05563d517b89440bcbc0
 ARG ZLIB_VERSION=1.3.2
 ARG ZLIB_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
-ARG OPENSSL_VERSION=4.0.3
-ARG OPENSSL_SHA256=325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9
+ARG OPENSSL_VERSION=4.1.0
+ARG OPENSSL_SHA256=50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd
 ARG CURL_VERSION=8.23.0
 ARG CURL_SHA256=8dadd7d2536a314f982ad05a651b713f426bf7d02cc2c76cffb9796f2218e6c5
 
@@ -42,10 +42,12 @@ RUN apt-get update \
         libc6-dev \
         linux-libc-dev \
         make \
+        openssl \
         patch \
         patchelf \
         perl \
         pkg-config \
+        python3 \
         stunnel4 \
         xz-utils \
     && rm -rf /var/lib/apt/lists/*
@@ -127,6 +129,9 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/curl.tar.xz \
     && echo "${CURL_SHA256}  /tmp/curl.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/curl.tar.xz \
     && rm /tmp/curl.tar.xz
+
+COPY patches/0001-enforce-cn-name-constraints-with-openssl-4.1.patch /tmp/curl-name-constraints.patch
+RUN patch --batch --forward -p1 < /tmp/curl-name-constraints.patch
 
 # The CA bundle is read from the platform rather than embedded. curl's
 # --with-ca-embed would compile a copy into the executable and then prefer it
@@ -252,6 +257,9 @@ RUN set -e; \
     done; \
     if [ "${ok}" != yes ]; then echo "HTTPS check failed:"; cat /tmp/tls.err; exit 1; fi; \
     echo "curl verifies a public certificate from the system trust store"
+
+COPY test-name-constraints.py /tests/test-name-constraints.py
+RUN python3 /tests/test-name-constraints.py curl /artifact/bin/curl
 
 FROM scratch AS artifact
 

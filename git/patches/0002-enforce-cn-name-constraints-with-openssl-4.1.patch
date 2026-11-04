@@ -1,0 +1,23 @@
+From: fil-c-utils maintainers
+Subject: [PATCH] Opt into CN name constraints with OpenSSL 4.1
+
+curl still matches CN-only certificates itself. OpenSSL 4.1 no longer checks
+DNS name constraints on those names unless the application explicitly enables
+subject checking, allowing a constrained CA to authenticate an unrelated host.
+Keep the certificate chain checks consistent with curl's hostname fallback.
+This also checks CN constraints on certificates that have a SAN.
+
+--- a/lib/vtls/openssl.c
++++ b/lib/vtls/openssl.c
+@@ -3945,2 +3945,11 @@
+    * Apple's SecTrust for verification. */
++#if OPENSSL_VERSION_NUMBER >= 0x40100000L
++  {
++    X509_VERIFY_PARAM *param = SSL_CTX_get0_param(octx->ssl_ctx);
++    /* curl's CN fallback also needs OpenSSL's DNS name constraints. */
++    X509_VERIFY_PARAM_set_hostflags(param,
++      X509_VERIFY_PARAM_get_hostflags(param) |
++      X509_CHECK_FLAG_ALWAYS_CHECK_SUBJECT);
++  }
++#endif
+   SSL_CTX_set_verify(octx->ssl_ctx, SSL_VERIFY_NONE, NULL);

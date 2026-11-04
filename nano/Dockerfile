@@ -7,8 +7,8 @@ ARG NCURSES_VERSION=6.6
 ARG NCURSES_SHA256=355b4cbbed880b0381a04c46617b7656e362585d52e9cf84a67e2009b749ff11
 ARG FILE_VERSION=5.48
 ARG FILE_SHA256=ed14656883b23a364b4057c05595d93252da9bc473d30106519519d0da141283
-ARG NANO_VERSION=9.2
-ARG NANO_SHA256=05ecb99247b782e8a5b3a25ed4101dd034b0236902f7449bc9795b717642f7e9
+ARG NANO_VERSION=9.3
+ARG NANO_SHA256=a9affc52c9596ee0682bcdd4ceb3c0b235eb221d83d733dfd9b0dff45897cb0d
 
 FROM ubuntu:24.04 AS build
 
@@ -142,9 +142,6 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/nano.tar.xz \
     && echo "${NANO_SHA256}  /tmp/nano.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/nano.tar.xz \
     && rm /tmp/nano.tar.xz
-
-COPY patches/0001-disable-x87-control-word-assembly-under-fil-c.patch /tmp/nano-fil-c.patch
-RUN patch --batch --forward -p1 < /tmp/nano-fil-c.patch
 
 # All of nano's features are on by default; only --enable-tiny and the
 # individual --disable-* flags take any away, and none are given here. The
