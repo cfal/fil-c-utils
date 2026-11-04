@@ -702,7 +702,7 @@ than content-addressed image digests.
 | Zstandard source | 1.5.7 | `eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3` |
 | curl source | 8.23.0 | `8dadd7d2536a314f982ad05a651b713f426bf7d02cc2c76cffb9796f2218e6c5` |
 | GNU Wget source | 1.25.0 | `766e48423e79359ea31e41db9e5c289675947a7fcf2efdcedb726ac9d0da3784` |
-| OpenSSL source (curl, git, OpenSSH) | 4.0.3 | `325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9` |
+| OpenSSL source (curl, git, OpenSSH) | 4.1.0 | `50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd` |
 | OpenSSL source (wget) | 3.6.5 | `a2157c2830efdec3788939b00c9b0638306d3f0bbb76dc4832ee503bb397df98` |
 | zlib source | 1.3.2 | `bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16` |
 | libunistring source | 1.5 | `fe89007a8a414ae4790b816b86859e877d3ab135db3c37f06541ff7e85ac344b` |
