@@ -60,6 +60,7 @@ RUN apt-get update \
         libc6-dev \
         linux-libc-dev \
         make \
+        openssl \
         patch \
         patchelf \
         perl \

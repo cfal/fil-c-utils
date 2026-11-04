@@ -376,7 +376,7 @@ delicate, and every one of them runs against the Fil-C binary.
 | Utility | Upstream suite | Result under Fil-C |
 | --- | --- | --- |
 | GNU tar | Autotest, 226 files | 208 pass, 36 skip |
-| curl | 1712 enabled cases | 1712 pass |
+| curl | 1715 enabled cases | 1715 pass |
 | GNU Wget | `tests/` + `testenv/`, 136 cases | 134 pass, 2 skip |
 | tmux | `regress/`, 174 cases (git only) | 174 pass |
 | gzip | 34 cases | 33 pass, 1 skip |
@@ -1166,8 +1166,10 @@ constraints when a SAN is present, so a constrained certificate needs both
 names to be permitted. Each build generates a local constrained-CA fixture
 and exercises its shipped, stripped client: permitted CN and SAN certificates
 must work, while forbidden CN, SAN, and mixed CN/SAN certificates must fail
-with a certificate-verification error. The fixture scripts and libcurl patches
-are duplicated to keep the two Docker build contexts self-contained.
+with a certificate-verification error. A hostname-mismatch case also requires
+SAN matching to take precedence over a matching CN. The fixture scripts and
+libcurl patches are duplicated to keep the two Docker build contexts
+self-contained.
 
 curl needs the same libtool treatment as XZ, for the same reason: a plain
 `-static` yields a dynamically loaded Fil-C executable, and `-Wc,-static` at

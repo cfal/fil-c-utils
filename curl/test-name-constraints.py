@@ -65,14 +65,19 @@ def generate(root):
          "basicConstraints=critical,CA:TRUE,pathlen:0\n"
          "keyUsage=critical,keyCertSign,cRLSign\n"
          "nameConstraints=critical,permitted;DNS:allowed.test\n")
+    allowed = "within.allowed.test"
+    outside = "outside.test"
+    constraint_error = "permitted subtree violation"
     cases = [
-        ("allowed-cn", "within.allowed.test", None, False),
-        ("allowed-san", "within.allowed.test", "within.allowed.test", False),
-        ("outside-cn", "outside.test", None, True),
-        ("outside-san", "outside.test", "outside.test", True),
-        ("outside-cn-with-san", "outside.test", "within.allowed.test", True),
+        ("allowed-cn", allowed, None, allowed, None),
+        ("allowed-san", allowed, allowed, allowed, None),
+        ("outside-cn", outside, None, outside, constraint_error),
+        ("outside-san", allowed, outside, outside, constraint_error),
+        ("outside-cn-with-san", outside, allowed, allowed, constraint_error),
+        ("san-precedence", allowed, "other.allowed.test", allowed,
+         "no alternative certificate subject name matches"),
     ]
-    for serial, (name, cn, san, rejected) in enumerate(cases, start=3):
+    for serial, (name, cn, san, _, _) in enumerate(cases, start=3):
         extensions = ("basicConstraints=critical,CA:FALSE\n"
                       "keyUsage=critical,digitalSignature\n"
                       "extendedKeyUsage=serverAuth\n")
@@ -85,8 +90,8 @@ def generate(root):
 
 
 def test(root, mode, binary, case):
-    name, cn, san, rejected = case
-    hostname = san or cn
+    name, _, _, hostname, error = case
+    rejected = error is not None
     server = http.server.ThreadingHTTPServer(("0.0.0.0", 0), Handler)
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(root / (name + ".chain.pem"), root / (name + ".key"))
@@ -116,7 +121,7 @@ def test(root, mode, binary, case):
             raise AssertionError(f"{mode} {name}: expected {expected}, got "
                                  f"{result.returncode}\n{result.stdout}{result.stderr}")
         if rejected:
-            assert "permitted subtree violation" in result.stderr.lower(), result.stderr
+            assert error in result.stderr.lower(), result.stderr
             assert not result.stdout, result.stdout
         else:
             assert body in result.stdout, result.stdout
