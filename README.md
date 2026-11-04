@@ -872,9 +872,12 @@ recovery.
 ├── bzip2/
 │   └── Dockerfile
 ├── curl/
-│   └── Dockerfile
+│   ├── Dockerfile
+│   ├── test-name-constraints.py
+│   └── patches/
 ├── git/
 │   ├── Dockerfile
+│   ├── test-name-constraints.py
 │   └── patches/
 ├── gzip/
 │   └── Dockerfile
@@ -1153,6 +1156,18 @@ x86-64 while curl derives `-L<prefix>/lib` from `--with-openssl`, and the
 mismatch fails the static link with a bare `cannot find -lssl`; and
 `make install_ssldirs` has to follow `install_sw`, or `openssl.cnf` is missing
 and the build's own TLS test cannot generate a certificate.
+
+curl 8.23 still implements common-name hostname fallback itself, while OpenSSL
+4.1 no longer checks DNS name constraints on the subject without an explicit
+opt-in. Both libcurl builds (curl and git) set
+`X509_CHECK_FLAG_ALWAYS_CHECK_SUBJECT` so a constrained CA cannot authenticate
+a CN-only certificate outside its permitted names. This also enforces CN
+constraints when a SAN is present, so a constrained certificate needs both
+names to be permitted. Each build generates a local constrained-CA fixture
+and exercises its shipped, stripped client: permitted CN and SAN certificates
+must work, while forbidden CN, SAN, and mixed CN/SAN certificates must fail
+with a certificate-verification error. The fixture scripts and libcurl patches
+are duplicated to keep the two Docker build contexts self-contained.
 
 curl needs the same libtool treatment as XZ, for the same reason: a plain
 `-static` yields a dynamically loaded Fil-C executable, and `-Wc,-static` at

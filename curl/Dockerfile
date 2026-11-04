@@ -46,6 +46,7 @@ RUN apt-get update \
         patchelf \
         perl \
         pkg-config \
+        python3 \
         stunnel4 \
         xz-utils \
     && rm -rf /var/lib/apt/lists/*
@@ -127,6 +128,9 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/curl.tar.xz \
     && echo "${CURL_SHA256}  /tmp/curl.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/curl.tar.xz \
     && rm /tmp/curl.tar.xz
+
+COPY patches/0001-enforce-cn-name-constraints-with-openssl-4.1.patch /tmp/curl-name-constraints.patch
+RUN patch --batch --forward -p1 < /tmp/curl-name-constraints.patch
 
 # The CA bundle is read from the platform rather than embedded. curl's
 # --with-ca-embed would compile a copy into the executable and then prefer it
@@ -252,6 +256,9 @@ RUN set -e; \
     done; \
     if [ "${ok}" != yes ]; then echo "HTTPS check failed:"; cat /tmp/tls.err; exit 1; fi; \
     echo "curl verifies a public certificate from the system trust store"
+
+COPY test-name-constraints.py /tests/test-name-constraints.py
+RUN python3 /tests/test-name-constraints.py curl /artifact/bin/curl
 
 FROM scratch AS artifact
 

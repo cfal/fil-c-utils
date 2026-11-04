@@ -156,6 +156,8 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/curl.tar.xz \
     && echo "${CURL_SHA256}  /tmp/curl.tar.xz" | sha256sum -c - \
     && tar --strip-components=1 -xJf /tmp/curl.tar.xz \
     && rm /tmp/curl.tar.xz
+COPY patches/0002-enforce-cn-name-constraints-with-openssl-4.1.patch /tmp/curl-name-constraints.patch
+RUN patch --batch --forward -p1 < /tmp/curl-name-constraints.patch
 RUN CFLAGS="-O2 -g" LDFLAGS="-L/deps/lib" ./configure \
         --disable-shared --enable-static --prefix=/deps \
         --with-openssl=/deps --with-zlib=/deps \
@@ -554,6 +556,9 @@ RUN set -e; \
     if [ "${ok}" != yes ]; then echo "HTTPS check failed:"; cat /tmp/tls.err; exit 1; fi; \
     test -e /tmp/tls-clone/.git; \
     echo "git clones over HTTPS using the system trust store"
+
+COPY test-name-constraints.py /tests/test-name-constraints.py
+RUN python3 /tests/test-name-constraints.py git /artifact/bin/git
 
 FROM scratch AS artifact
 
