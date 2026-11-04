@@ -1120,10 +1120,10 @@ nano vendors gnulib's x87 control-word helper. On x86-64 its long-double
 formatting path normally saves and restores the precision control with inline
 `fnstcw` and `fldcw`, whose memory operands Fil-C turns into run-time traps.
 Fil-C's musl fenv implementation cannot change x87 precision, so the default
-extended precision remains in effect. A scoped patch omits the redundant save
-and restore under Fil-C. gzip 1.15 no longer vendors that helper, so it needs no
-equivalent patch. Both Dockerfiles reject the compiler's trap marker if any
-unsupported inline assembly remains.
+extended precision remains in effect. nano 9.3's gnulib already omits the
+redundant save and restore under Fil-C, so no local patch is needed. gzip 1.15
+no longer vendors that helper either. Both Dockerfiles reject the compiler's
+trap marker if any unsupported inline assembly remains.
 
 gzip 1.15 also moved `<signal.h>` below `gzip.h`, which defines a legacy `head`
 macro. Pizfix's AArch64 signal-context structs use the same field name, so a

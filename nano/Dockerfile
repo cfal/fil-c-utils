@@ -143,9 +143,6 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/nano.tar.xz \
     && tar --strip-components=1 -xJf /tmp/nano.tar.xz \
     && rm /tmp/nano.tar.xz
 
-COPY patches/0001-disable-x87-control-word-assembly-under-fil-c.patch /tmp/nano-fil-c.patch
-RUN patch --batch --forward -p1 < /tmp/nano-fil-c.patch
-
 # All of nano's features are on by default; only --enable-tiny and the
 # individual --disable-* flags take any away, and none are given here. The
 # explicit --enable-utf8 and the presence of libmagic are the two that depend
