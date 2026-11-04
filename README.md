@@ -415,8 +415,8 @@ helper's root transition rather than only its executable path. Those overrides
 are isolated so they cannot alter the other 87 cases. A live preauthentication
 connection also verifies that every
 execution-capable Fil-C task has no-new-privileges and the seccomp filter.
-Fil-C 0.686 keeps only its original, fully signal-blocked thread-group leader
-outside that filter in a permanent `pause()` loop to preserve `/proc/self`;
+Fil-C's musl startup keeps only its original, fully signal-blocked thread-group
+leader outside that filter in a permanent `pause()` loop to preserve `/proc/self`;
 the build asserts it is the sole exception. The remaining skips need an
 external DNSSEC fixture, ptrace tooling and a non-root harness, a PAM or
 BSD-auth keyboard-interactive backend, or PKCS#11 provider loading. Seven
@@ -772,7 +772,7 @@ RAR compression algorithm. Review `out/licenses/` before redistribution.
   account database. The default configuration still spells
   `KbdInteractiveAuthentication yes`, but no keyboard-interactive backend is
   compiled in, so that method is inert. OpenSSH shares curl's no-assembly
-  OpenSSL and the throughput and side-channel caveats above. Fil-C 0.686 cannot
+  OpenSSL and the throughput and side-channel caveats above. Fil-C cannot
   lower the overflow traps from OpenSSH's `-ftrapv` hardening flag, so this
   build uses `-fwrapv`: signed overflow is defined to wrap instead of aborting.
   OpenSSH 10.6 no longer enables `_FORTIFY_SOURCE` for every platform; this
@@ -1229,7 +1229,7 @@ preauthentication seccomp filter, then allows the runtime's `sched_yield` and
 runtime-managed threads alive is unsafe. Its second patch routes process-title
 updates through `zsetproctitle`; Fil-C owns the original `argv` storage, so
 OpenSSH's usual overwrite-in-place implementation is unavailable. The Fil-C
-0.686 aarch64 release also leaves its kernel-UAPI `asm` include symlink dangling
+0.687 aarch64 release also leaves its kernel-UAPI `asm` include symlink dangling
 on Debian multiarch systems; the build retargets it to the architecture-specific
 directory and compiles a seccomp/tun header probe before building dependencies.
 Fil-C 0.686 supports the corrected byte-aligned libcrux aggregate lowering and
