@@ -710,7 +710,7 @@ than content-addressed image digests.
 | libpsl source | 0.23.3 | `93941f85a1e7bd593fa94f299233cb5dfc91cd144fd9a78a6ceb75001c5b03be` |
 | PCRE2 source | 10.49 | `929f0b20e62879252a15886b06c89f1edef61a363cbd5826fb041080a5e557ae` |
 | c-ares source | 1.34.9 | `9364b70a12eb59a06830fb488d9357f90100dff0d98b23ea3593a183d43e6f2f` |
-| GNU nano source | 9.2 | `05ecb99247b782e8a5b3a25ed4101dd034b0236902f7449bc9795b717642f7e9` |
+| GNU nano source | 9.3 | `a9affc52c9596ee0682bcdd4ceb3c0b235eb221d83d733dfd9b0dff45897cb0d` |
 | ncurses source | 6.6 | `355b4cbbed880b0381a04c46617b7656e362585d52e9cf84a67e2009b749ff11` |
 | file source | 5.48 | `ed14656883b23a364b4057c05595d93252da9bc473d30106519519d0da141283` |
 | tmux source | 3.8 | `e79c699c7e949dccd0a4a125e17b8d1261e311b16979dbc8eb34542f3966d82e` |
