@@ -718,7 +718,7 @@ than content-addressed image digests.
 | libevent source | 2.1.13 | `f7e9383b8c0baa81b687e5b5eecc01beefaf1b19b64151d95ed61647fe7a315c` |
 | utf8proc source | 2.12.0 | `a393fbef160835fb315bc3e91ba8d86f7a73a7cec9e6198b6c60b848b498bfeb` |
 | Git source | 2.56.0 | `26c56c296b38c0695b26fa95f475f1d01704d2d38e73465ca30b0b2f5dc789d3` |
-| Expat source | 2.9.0 | `16afbb9cefead2aa278105cf27d9f597bde7fbf3dbb85015857ca7ca6a4e89ba` |
+| Expat source | 2.10.0 | `5466a341f9c692ef7a958a6881311be597f8e1ce345984cf78414f54793dea4c` |
 | OpenSSH portable source | 10.6p1 | `a9dc9565dffe8640f64d863cd29a32bc4a3dbdec0566a7fc44c5d6ee767d5f39` |
 
 The Dockerfile frontend, Ubuntu base image, and Ubuntu packages installed in
