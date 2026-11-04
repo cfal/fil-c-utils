@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
-ARG FILC_VERSION=0.686
-ARG FILC_X86_64_SHA256=60bfbe8ee63d7e462394aa8d5e44fee675de892bcf800d9cc80d86378cad6b07
-ARG FILC_AARCH64_SHA256=142987830090df8c0cffa0bbcad32a930f661683f8c5073b21986e39aa7209f2
+ARG FILC_VERSION=0.687
+ARG FILC_X86_64_SHA256=aab538401f78a47ab261ee79afed8c6b99e1d4848e263ae159a75b03c1288da1
+ARG FILC_AARCH64_SHA256=f1337799051664f93c7712141deaebe78571ae96ffcf05563d517b89440bcbc0
 ARG ZLIB_VERSION=1.3.2
 ARG ZLIB_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
 ARG OPENSSL_VERSION=4.0.3
@@ -61,7 +61,7 @@ RUN apt-get update \
 RUN sed -i 's/^# *en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen \
     && locale-gen
 
-# Fil-C 0.686's generated setup.sh checks x86_64's multiarch path on every
+# Fil-C's generated setup.sh still checks x86_64's multiarch path on every
 # architecture. Its fallback leaves os-include/asm dangling on aarch64, hiding
 # the seccomp and tun UAPI behind a missing asm/types.h. Use the architecture-
 # specific path, as Fil-C's own build_os_include.sh does.
@@ -148,7 +148,7 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/openssh.tar.gz \
     && tar --strip-components=1 -xzf /tmp/openssh.tar.gz \
     && rm /tmp/openssh.tar.gz
 
-# Two patches adapt pristine OpenSSH 10.6p1 to Fil-C 0.686 and are gated on
+# Two patches adapt pristine OpenSSH 10.6p1 to Fil-C and are gated on
 # __FILC__ so an unpatched build keeps upstream behaviour. The first carries
 # over the Fil-C 0.686 OpenSSH port's seccomp changes and teaches the sandbox
 # about the runtime's threads: it locks them before the filter is installed,
@@ -193,7 +193,7 @@ RUN patch --batch --forward -p1 < /tmp/openssh-filc-sandbox.patch \
 # PAM, libedit, Kerberos and audit are all opt-in upstream and stay off, so
 # nothing outside zlib and OpenSSL reaches the link.
 #
-# OpenSSH's hardening probe enables -ftrapv, but Fil-C 0.686 accepts the probe
+# OpenSSH's hardening probe enables -ftrapv, but Fil-C accepts the probe
 # while leaving its llvm.ubsantrap overflow paths as unsupported-intrinsic
 # panics. Suppress only that false-positive probe and use -fwrapv so signed
 # overflow is defined rather than optimizer-dependent. OpenSSH 10.6 also stops
@@ -591,7 +591,7 @@ RUN set -euo pipefail; \
 # seccomp filter and no-new-privileges state on every execution-capable Fil-C
 # task, observes a real process title, rejects an unauthorized key, proves the
 # setuid ssh-keysign transition from an unprivileged client, survives SIGHUP,
-# and shuts down cleanly. Fil-C 0.686's musl startup keeps the original thread-
+# and shuts down cleanly. Fil-C's musl startup keeps the original thread-
 # group leader signal-blocked in an infinite pause solely to preserve
 # /proc/self; it never enters Fil-C or application code. The task checks that
 # exact leader as the sole exception, including the mask with all blockable
