@@ -99,8 +99,9 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/zlib.tar.gz \
     && echo "${ZLIB_SHA256}  /tmp/zlib.tar.gz" | sha256sum -c - \
     && tar --strip-components=1 -xzf /tmp/zlib.tar.gz \
     && rm /tmp/zlib.tar.gz
-RUN CFLAGS="-O2 -g" ./configure --static --prefix=/deps \
+RUN CFLAGS="-O2 -g" LDFLAGS="-static" ./configure --static --prefix=/deps \
     && make -j"$(nproc)" \
+    && make check \
     && make install
 
 WORKDIR /pcre2

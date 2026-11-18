@@ -82,8 +82,10 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/zlib.tar.gz \
 
 RUN CC=/opt/filc/build/bin/clang \
     CFLAGS="-O2 -g" \
+    LDFLAGS="-static" \
     ./configure --static --prefix=/deps \
     && make -j"$(nproc)" \
+    && make check \
     && make install
 
 WORKDIR /openssl
