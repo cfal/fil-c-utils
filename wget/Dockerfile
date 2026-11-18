@@ -3,8 +3,8 @@
 ARG FILC_VERSION=0.687
 ARG FILC_X86_64_SHA256=aab538401f78a47ab261ee79afed8c6b99e1d4848e263ae159a75b03c1288da1
 ARG FILC_AARCH64_SHA256=f1337799051664f93c7712141deaebe78571ae96ffcf05563d517b89440bcbc0
-ARG ZLIB_VERSION=1.3.2
-ARG ZLIB_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
+ARG ZLIB_VERSION=1.4
+ARG ZLIB_SHA256=02dd159783677a749c04adbdd02b55b8a2bcc7e054f51b76b549199a916ad584
 # Held on OpenSSL 3.x while curl and git use 4.x. wget 1.25.0, the current
 # release, does not support OpenSSL 4: it calls SSLv3_client_method, which 4.0
 # removed, so it does not even compile. Guarding that call gets it to build, but
