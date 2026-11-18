@@ -7,8 +7,8 @@ ARG ZLIB_VERSION=1.4
 ARG ZLIB_SHA256=02dd159783677a749c04adbdd02b55b8a2bcc7e054f51b76b549199a916ad584
 ARG OPENSSL_VERSION=4.1.0
 ARG OPENSSL_SHA256=50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd
-ARG OPENSSH_VERSION=10.6p1
-ARG OPENSSH_SHA256=a9dc9565dffe8640f64d863cd29a32bc4a3dbdec0566a7fc44c5d6ee767d5f39
+ARG OPENSSH_VERSION=10.6p2
+ARG OPENSSH_SHA256=9ae44872090cf2f06b3cf9ff147e7f16f309671340763ed2f99248398ae29d5b
 
 FROM ubuntu:24.04 AS build
 
@@ -148,7 +148,7 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/openssh.tar.gz \
     && tar --strip-components=1 -xzf /tmp/openssh.tar.gz \
     && rm /tmp/openssh.tar.gz
 
-# Two patches adapt pristine OpenSSH 10.6p1 to Fil-C and are gated on
+# Two patches adapt pristine OpenSSH 10.6p2 to Fil-C and are gated on
 # __FILC__ so an unpatched build keeps upstream behaviour. The first carries
 # over the Fil-C 0.686 OpenSSH port's seccomp changes and teaches the sandbox
 # about the runtime's threads: it locks them before the filter is installed,
