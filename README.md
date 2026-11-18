@@ -389,6 +389,9 @@ delicate, and every one of them runs against the Fil-C binary.
 | git | 1059 files | all pass, 6 cases skipped |
 | OpenSSH | `make tests`: 97 functional cases, unit/file/compatibility tests | 87 functional pass, 10 skip; PTY, password, and hostbased pass separately |
 
+zlib's upstream static and large-file tests also gate each dependency build
+for curl, Wget, git, and OpenSSH.
+
 Nothing needed to be excluded or marked expected-to-fail: Fil-C causes no
 failures in any of them. Skipped cases are features these builds do not enable,
 such as HTTP/2 and IDN for curl, or tests needing root for tar. Wget's two
@@ -407,9 +410,12 @@ three files run, and they are the ones that test the encoding machinery.
 OpenSSH's ten are named individually, and the build asserts all 97 functional
 tests still exist and the exact 87/10 main-suite split. Its PTY test is rerun
 with a workaround scoped to an upstream shell-pattern portability bug.
-Password authentication is rerun with a throwaway yescrypt password and
-succeeds; hostbased authentication is rerun after installation and drives the
-shipped `ssh-keysign`. An unprivileged artifact-only client then fails with the
+Password authentication is rerun with throwaway yescrypt and SHA-512 hashes.
+Both accept the correct password, reject a nonempty wrong password, and accept
+a wrong-then-correct retry only after exactly two prompts. Server logs confirm
+each rejection and acceptance. Hostbased authentication is rerun after
+installation and drives the shipped `ssh-keysign`. An unprivileged artifact-only
+client then fails with the
 setuid bit removed and succeeds after mode `4711` is restored, proving the
 helper's root transition rather than only its executable path. Those overrides
 are isolated so they cannot alter the other 87 cases. A live preauthentication
@@ -693,7 +699,7 @@ than content-addressed image digests.
 | --- | --- | --- |
 | Fil-C (x86_64) | 0.687 | `aab538401f78a47ab261ee79afed8c6b99e1d4848e263ae159a75b03c1288da1` |
 | Fil-C (aarch64) | 0.687 | `f1337799051664f93c7712141deaebe78571ae96ffcf05563d517b89440bcbc0` |
-| 7-Zip source | 26.05 | `0b6080b8c3e7a579161d2d495224c0e51c467576cb4c7048b0ab485ef44cc22e` |
+| 7-Zip source | 26.06 | `a4e374c8f864f51df48c2cfd0e1413ec3b2ea030deae852d6a655402ebb61ac4` |
 | unRAR source | 7.3.2 | `f61a1160d6e2ebbda2ad353c8e82f62ab4312f97fde23c6c2c982d25e0014f99` |
 | GNU tar source | 1.35 | `4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16` |
 | GNU gzip source | 1.15 | `9aa0cc780dec156b8282844833b342ab7cb08c25d2cd9a1869cdd0df31deff48` |
@@ -704,7 +710,7 @@ than content-addressed image digests.
 | GNU Wget source | 1.25.0 | `766e48423e79359ea31e41db9e5c289675947a7fcf2efdcedb726ac9d0da3784` |
 | OpenSSL source (curl, git, OpenSSH) | 4.1.0 | `50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd` |
 | OpenSSL source (wget) | 3.6.5 | `a2157c2830efdec3788939b00c9b0638306d3f0bbb76dc4832ee503bb397df98` |
-| zlib source | 1.3.2 | `bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16` |
+| zlib source | 1.4 | `02dd159783677a749c04adbdd02b55b8a2bcc7e054f51b76b549199a916ad584` |
 | libunistring source | 1.5 | `fe89007a8a414ae4790b816b86859e877d3ab135db3c37f06541ff7e85ac344b` |
 | libidn2 source | 2.3.8 | `f557911bf6171621e1f72ff35f5b1825bb35b52ed45325dcdee931e5d3c0787a` |
 | libpsl source | 0.23.3 | `93941f85a1e7bd593fa94f299233cb5dfc91cd144fd9a78a6ceb75001c5b03be` |
@@ -717,9 +723,9 @@ than content-addressed image digests.
 | tmux tests (git tag) | 3.8 | `f873f9379c9cf30d3d66b642a955118c4fbb0019d046d13e6012340811e5dcb7` |
 | libevent source | 2.1.13 | `f7e9383b8c0baa81b687e5b5eecc01beefaf1b19b64151d95ed61647fe7a315c` |
 | utf8proc source | 2.12.0 | `a393fbef160835fb315bc3e91ba8d86f7a73a7cec9e6198b6c60b848b498bfeb` |
-| Git source | 2.56.0 | `26c56c296b38c0695b26fa95f475f1d01704d2d38e73465ca30b0b2f5dc789d3` |
+| Git source | 2.56.1 | `f0b0bf89264b9bd2e1c640363e7529643989da76281600473c50745cd34a607f` |
 | Expat source | 2.10.0 | `5466a341f9c692ef7a958a6881311be597f8e1ce345984cf78414f54793dea4c` |
-| OpenSSH portable source | 10.6p1 | `a9dc9565dffe8640f64d863cd29a32bc4a3dbdec0566a7fc44c5d6ee767d5f39` |
+| OpenSSH portable source | 10.6p2 | `9ae44872090cf2f06b3cf9ff147e7f16f309671340763ed2f99248398ae29d5b` |
 
 The Dockerfile frontend, Ubuntu base image, and Ubuntu packages installed in
 the builder are not pinned to immutable digests or a snapshot repository. They
@@ -768,8 +774,9 @@ RAR compression algorithm. Review `out/licenses/` before redistribution.
 - OpenSSH is built without PKCS#11 token providers or FIDO/security-key
   providers because those paths load host shared objects that a static Fil-C
   process cannot use. PAM, Kerberos, and BSD authentication are also absent.
-  Password authentication, including yescrypt hashes, works through the system
-  account database. The default configuration still spells
+  Password authentication, including yescrypt and SHA-512 hashes, reads the
+  system account database and uses Fil-C's bundled libc to verify hashes, not
+  the host's PAM or libcrypt. The default configuration still spells
   `KbdInteractiveAuthentication yes`, but no keyboard-interactive backend is
   compiled in, so that method is inert. OpenSSH shares curl's no-assembly
   OpenSSL and the throughput and side-channel caveats above. Fil-C cannot
