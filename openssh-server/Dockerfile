@@ -404,21 +404,48 @@ RUN set -euo pipefail; \
 
 # Exercise upstream's password regression separately, so its test-only root
 # login override and nonempty SUDO placeholder cannot change any other case.
-# Ubuntu's chpasswd generates a yescrypt hash explicitly; the cleartext and the
-# unlocked root password exist only in this discarded builder layer.
+# Upstream's empty-password cases return before crypt(). Add a nonempty wrong
+# password and a wrong-then-correct retry, checking the server's decision and
+# prompt count so a bypass cannot masquerade as a successful retry.
+# The cleartext and unlocked root password stay in this discarded builder layer.
 RUN set -euo pipefail; \
     test_password='filc-openssh-password-test'; \
-    printf 'root:%s\n' "${test_password}" | chpasswd --crypt-method YESCRYPT; \
-    grep -q '^root:\$y\$' /etc/shadow; \
     printf '%s\n' "${test_password}" > regress/password; \
     chmod 0600 regress/password; \
     cleanup_password() { passwd --lock root >/dev/null; rm -f regress/password; }; \
     trap cleanup_password EXIT; \
-    timeout -k 60 900 make t-exec LTESTS=password SUDO=env \
-        TEST_SSH_SSHD_CONFOPTS='PermitRootLogin yes' 2>&1 | tee /tmp/password.log; \
-    test "$(grep -c '^run test ' /tmp/password.log)" -eq 1; \
-    test "$(grep -c '^skip test ' /tmp/password.log || true)" -eq 0; \
-    ! grep -Eq '^(Skipped|SKIPPED):' /tmp/password.log
+    printf '%s\n' \
+        '' \
+        'trace wrong nonempty password' \
+        'echo filc-openssh-wrong-password > "${OBJ}/replypass"' \
+        'echo 1 > "${OBJ}/replypass.N"' \
+        '${SSH} $opts -oNumberOfPasswordPrompts=1 -F "${OBJ}/ssh_proxy" somehost true' \
+        'rc=$?' \
+        'test "${rc}" -eq 255 || fail "wrong-password exit: ${rc}"' \
+        'grep -Fq "Failed password for ${USER} from " "${TEST_SSHD_LOGFILE}" || fail "missing password denial"' \
+        'test "$(cat "${OBJ}/replypass.N")" -eq 2 || fail "wrong-password prompt count"' \
+        'trace wrong then correct password' \
+        '(echo filc-openssh-wrong-password; cat "${OBJ}/password") > "${OBJ}/replypass"' \
+        'echo 1 > "${OBJ}/replypass.N"' \
+        '${SSH} $opts -oNumberOfPasswordPrompts=2 -F "${OBJ}/ssh_proxy" somehost true' \
+        'test "$?" -eq 0 || fail "password retry failed"' \
+        'test "$(cat "${OBJ}/replypass.N")" -eq 3 || fail "password retry did not use two prompts"' \
+        'grep -Fq "Failed password for ${USER} from " "${TEST_SSHD_LOGFILE}" || fail "missing retry denial"' \
+        'grep -Fq "Accepted password for ${USER} from " "${TEST_SSHD_LOGFILE}" || fail "missing retry acceptance"' \
+        >> regress/password.sh; \
+    for method in YESCRYPT SHA512; do \
+        printf 'root:%s\n' "${test_password}" | chpasswd --crypt-method "${method}"; \
+        case "${method}" in \
+            YESCRYPT) grep -q '^root:\$y\$' /etc/shadow ;; \
+            SHA512) grep -q '^root:\$6\$' /etc/shadow ;; \
+        esac; \
+        TEST_REGRESS_CACHE_DIR= timeout -k 60 900 make t-exec LTESTS=password SUDO=env \
+            TEST_SSH_SSHD_CONFOPTS='PermitRootLogin yes' 2>&1 | tee /tmp/password.log; \
+        test "$(grep -c '^run test ' /tmp/password.log)" -eq 1; \
+        test "$(grep -c '^skip test ' /tmp/password.log || true)" -eq 0; \
+        ! grep -Eq '^(Skipped|SKIPPED):|ok cached' /tmp/password.log; \
+        echo "password acceptance, rejection and retry passed: ${method}"; \
+    done
 
 # The suite is past, so install for real: the smoke test below needs the
 # helpers at the compiled-in /libexec paths, which only a real install gives.
