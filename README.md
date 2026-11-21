@@ -413,11 +413,11 @@ with a workaround scoped to an upstream shell-pattern portability bug.
 Password authentication is rerun with throwaway yescrypt and SHA-512 hashes.
 Both accept the correct password, reject a nonempty wrong password, and accept
 a wrong-then-correct retry only after exactly two prompts. Server logs confirm
-each rejection and acceptance. Hostbased authentication is rerun after
-installation and drives the shipped `ssh-keysign`. An unprivileged artifact-only
-client then fails with the
-setuid bit removed and succeeds after mode `4711` is restored, proving the
-helper's root transition rather than only its executable path. Those overrides
+the wrong-password rejection and retry outcome. Hostbased authentication is
+rerun after installation and drives the shipped `ssh-keysign`. An unprivileged
+artifact-only client then fails with the setuid bit removed and succeeds after
+mode `4711` is restored, proving the helper's root transition rather than only
+its executable path. Those overrides
 are isolated so they cannot alter the other 87 cases. A live preauthentication
 connection also verifies that every
 execution-capable Fil-C task has no-new-privileges and the seccomp filter.

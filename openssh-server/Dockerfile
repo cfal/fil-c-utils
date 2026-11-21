@@ -443,7 +443,7 @@ RUN set -euo pipefail; \
             TEST_SSH_SSHD_CONFOPTS='PermitRootLogin yes' 2>&1 | tee /tmp/password.log; \
         test "$(grep -c '^run test ' /tmp/password.log)" -eq 1; \
         test "$(grep -c '^skip test ' /tmp/password.log || true)" -eq 0; \
-        ! grep -Eq '^(Skipped|SKIPPED):|ok cached' /tmp/password.log; \
+        ! grep -Eq '^(Skipped|SKIPPED):|ok cached' /tmp/password.log || exit 1; \
         echo "password acceptance, rejection and retry passed: ${method}"; \
     done
 
