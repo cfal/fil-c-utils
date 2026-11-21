@@ -279,16 +279,16 @@ RUN set -e; \
         file "${binary}" > "/tmp/${binary}.file"; \
         grep -Fq "static-pie linked" "/tmp/${binary}.file"; \
         readelf -lW "${binary}" > "/tmp/${binary}.segments"; \
-        ! grep -Fq " INTERP " "/tmp/${binary}.segments"; \
+        ! grep -Fq " INTERP " "/tmp/${binary}.segments" || exit 1; \
         readelf -SW "${binary}" > "/tmp/${binary}.sections"; \
         grep -Fq ".debug_info" "/tmp/${binary}.sections"; \
         readelf -sW "${binary}" > "/tmp/${binary}.symbols"; \
         grep -Fq "pizlonated" "/tmp/${binary}.symbols"; \
         grep -Eq "filc_call_user_main|zgc_alloc" "/tmp/${binary}.symbols"; \
         strings -a "${binary}" > "/tmp/${binary}.strings"; \
-        ! grep -q "@llvm\." "/tmp/${binary}.strings"; \
-        ! grep -Fq "Unhandled intrinsic" "/tmp/${binary}.strings"; \
-        ! grep -Fq "cannot handle inline asm" "/tmp/${binary}.strings"; \
+        ! grep -q "@llvm\." "/tmp/${binary}.strings" || exit 1; \
+        ! grep -Fq "Unhandled intrinsic" "/tmp/${binary}.strings" || exit 1; \
+        ! grep -Fq "cannot handle inline asm" "/tmp/${binary}.strings" || exit 1; \
     done; \
     check-filc-alignment "${binaries[@]}" \
     && ./ssh -V 2> /tmp/ssh.version \
@@ -315,7 +315,7 @@ RUN make compat-tests \
         test -x "openbsd-compat/regress/${test_binary}"; \
     done
 
-# OpenSSH 10.6p1's ssh-tty.sh checks for a tab with a `*\t*` POSIX case
+# Upstream's ssh-tty.sh checks for a tab with a `*\t*` POSIX case
 # pattern. Ubuntu's /bin/sh parses that as a literal `t`, so root's normal
 # HOME makes the test self-skip even though it contains no whitespace. Keep
 # the workaround local to this test. Docker builds also leave SHELL unset, so
@@ -336,7 +336,7 @@ RUN set -euo pipefail; \
     fi; \
     test "$(grep -c '^run test ' /tmp/ssh-tty.log)" -eq 1; \
     test "$(grep -c '^skip test ' /tmp/ssh-tty.log || true)" -eq 0; \
-    ! grep -Eq '^(Skipped|SKIPPED):' /tmp/ssh-tty.log; \
+    ! grep -Eq '^(Skipped|SKIPPED):' /tmp/ssh-tty.log || exit 1; \
     for _ in $(seq 1 20); do \
         test -e regress/ctl-sock || break; \
         sleep 1; \
@@ -523,18 +523,18 @@ RUN set -e; \
             *) exit 1 ;; \
         esac; \
         readelf -lW "${f}" > /tmp/art.segments; \
-        ! grep -Fq ' INTERP ' /tmp/art.segments; \
+        ! grep -Fq ' INTERP ' /tmp/art.segments || exit 1; \
         grep -Fq 'GNU_RELRO' /tmp/art.segments; \
-        ! grep -Eq 'GNU_STACK.*RWE' /tmp/art.segments; \
+        ! grep -Eq 'GNU_STACK.*RWE' /tmp/art.segments || exit 1; \
         readelf -SW "${f}" > /tmp/art.sections; \
-        ! grep -Fq ".debug_info" /tmp/art.sections; \
+        ! grep -Fq ".debug_info" /tmp/art.sections || exit 1; \
         readelf -sW "${f}" > /tmp/art.symbols; \
         grep -Fq "pizlonated" /tmp/art.symbols; \
         grep -Eq "filc_call_user_main|zgc_alloc" /tmp/art.symbols; \
         strings -a "${f}" > /tmp/art.strings; \
-        ! grep -q '@llvm\.' /tmp/art.strings; \
-        ! grep -Fq 'Unhandled intrinsic' /tmp/art.strings; \
-        ! grep -Fq 'cannot handle inline asm' /tmp/art.strings; \
+        ! grep -q '@llvm\.' /tmp/art.strings || exit 1; \
+        ! grep -Fq 'Unhandled intrinsic' /tmp/art.strings || exit 1; \
+        ! grep -Fq 'cannot handle inline asm' /tmp/art.strings || exit 1; \
     done; \
     test "$(stat -c '%u:%g:%a' /artifact/libexec/ssh-keysign)" = '0:0:4711'; \
     echo 'all 14 artifact binaries are stripped static Fil-C PIEs without compiler traps'
@@ -552,7 +552,7 @@ RUN set -euo pipefail; \
     cp -a /artifact/libexec /libexec; \
     /bin/sshd -t; \
     ! grep -Eq 'SC_ALLOW\(__NR_(clone|clone3|fork|vfork|setgroups|setgid|setregid|setresgid|setuid|setreuid|setresuid|tkill|tgkill)\)' \
-        sandbox-seccomp-filter.c; \
+        sandbox-seccomp-filter.c || exit 1; \
     strings -a /libexec/ssh-pkcs11-helper > /tmp/pkcs11-helper.strings; \
     grep -Fq 'PKCS#11 support disabled at compile time' /tmp/pkcs11-helper.strings; \
     set +e; \
@@ -575,7 +575,7 @@ RUN set -euo pipefail; \
         TEST_SSH_HOSTBASED_AUTH=setupandrun 2>&1 | tee /tmp/hostbased.log; \
     test "$(grep -c '^run test ' /tmp/hostbased.log)" -eq 1; \
     test "$(grep -c '^skip test ' /tmp/hostbased.log || true)" -eq 0; \
-    ! grep -Eq '^(Skipped|SKIPPED):' /tmp/hostbased.log; \
+    ! grep -Eq '^(Skipped|SKIPPED):' /tmp/hostbased.log || exit 1; \
     cmp ssh_config.out /artifact/etc/ssh/ssh_config; \
     test ! -e /artifact/etc/ssh/ssh_known_hosts
 
