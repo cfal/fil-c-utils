@@ -3,12 +3,12 @@
 ARG FILC_VERSION=0.687
 ARG FILC_X86_64_SHA256=aab538401f78a47ab261ee79afed8c6b99e1d4848e263ae159a75b03c1288da1
 ARG FILC_AARCH64_SHA256=f1337799051664f93c7712141deaebe78571ae96ffcf05563d517b89440bcbc0
-ARG ZLIB_VERSION=1.3.2
-ARG ZLIB_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
+ARG ZLIB_VERSION=1.4
+ARG ZLIB_SHA256=02dd159783677a749c04adbdd02b55b8a2bcc7e054f51b76b549199a916ad584
 ARG OPENSSL_VERSION=4.1.0
 ARG OPENSSL_SHA256=50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd
-ARG OPENSSH_VERSION=10.6p1
-ARG OPENSSH_SHA256=a9dc9565dffe8640f64d863cd29a32bc4a3dbdec0566a7fc44c5d6ee767d5f39
+ARG OPENSSH_VERSION=10.6p2
+ARG OPENSSH_SHA256=9ae44872090cf2f06b3cf9ff147e7f16f309671340763ed2f99248398ae29d5b
 
 FROM ubuntu:24.04 AS build
 
@@ -112,8 +112,9 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/zlib.tar.gz \
     && echo "${ZLIB_SHA256}  /tmp/zlib.tar.gz" | sha256sum -c - \
     && tar --strip-components=1 -xzf /tmp/zlib.tar.gz \
     && rm /tmp/zlib.tar.gz
-RUN CFLAGS="-O2 -g" ./configure --static --prefix=/deps \
+RUN CFLAGS="-O2 -g" LDFLAGS="-static" ./configure --static --prefix=/deps \
     && make -j"$(nproc)" \
+    && make check \
     && make install
 
 # no-asm is required: Fil-C cannot compile OpenSSL's hand-written assembly, so
@@ -148,7 +149,7 @@ RUN curl -fsSL ${FETCH_RETRY} -o /tmp/openssh.tar.gz \
     && tar --strip-components=1 -xzf /tmp/openssh.tar.gz \
     && rm /tmp/openssh.tar.gz
 
-# Two patches adapt pristine OpenSSH 10.6p1 to Fil-C and are gated on
+# Two patches adapt pristine OpenSSH 10.6p2 to Fil-C and are gated on
 # __FILC__ so an unpatched build keeps upstream behaviour. The first carries
 # over the Fil-C 0.686 OpenSSH port's seccomp changes and teaches the sandbox
 # about the runtime's threads: it locks them before the filter is installed,
@@ -278,16 +279,16 @@ RUN set -e; \
         file "${binary}" > "/tmp/${binary}.file"; \
         grep -Fq "static-pie linked" "/tmp/${binary}.file"; \
         readelf -lW "${binary}" > "/tmp/${binary}.segments"; \
-        ! grep -Fq " INTERP " "/tmp/${binary}.segments"; \
+        ! grep -Fq " INTERP " "/tmp/${binary}.segments" || exit 1; \
         readelf -SW "${binary}" > "/tmp/${binary}.sections"; \
         grep -Fq ".debug_info" "/tmp/${binary}.sections"; \
         readelf -sW "${binary}" > "/tmp/${binary}.symbols"; \
         grep -Fq "pizlonated" "/tmp/${binary}.symbols"; \
         grep -Eq "filc_call_user_main|zgc_alloc" "/tmp/${binary}.symbols"; \
         strings -a "${binary}" > "/tmp/${binary}.strings"; \
-        ! grep -q "@llvm\." "/tmp/${binary}.strings"; \
-        ! grep -Fq "Unhandled intrinsic" "/tmp/${binary}.strings"; \
-        ! grep -Fq "cannot handle inline asm" "/tmp/${binary}.strings"; \
+        ! grep -q "@llvm\." "/tmp/${binary}.strings" || exit 1; \
+        ! grep -Fq "Unhandled intrinsic" "/tmp/${binary}.strings" || exit 1; \
+        ! grep -Fq "cannot handle inline asm" "/tmp/${binary}.strings" || exit 1; \
     done; \
     check-filc-alignment "${binaries[@]}" \
     && ./ssh -V 2> /tmp/ssh.version \
@@ -314,7 +315,7 @@ RUN make compat-tests \
         test -x "openbsd-compat/regress/${test_binary}"; \
     done
 
-# OpenSSH 10.6p1's ssh-tty.sh checks for a tab with a `*\t*` POSIX case
+# Upstream's ssh-tty.sh checks for a tab with a `*\t*` POSIX case
 # pattern. Ubuntu's /bin/sh parses that as a literal `t`, so root's normal
 # HOME makes the test self-skip even though it contains no whitespace. Keep
 # the workaround local to this test. Docker builds also leave SHELL unset, so
@@ -335,7 +336,7 @@ RUN set -euo pipefail; \
     fi; \
     test "$(grep -c '^run test ' /tmp/ssh-tty.log)" -eq 1; \
     test "$(grep -c '^skip test ' /tmp/ssh-tty.log || true)" -eq 0; \
-    ! grep -Eq '^(Skipped|SKIPPED):' /tmp/ssh-tty.log; \
+    ! grep -Eq '^(Skipped|SKIPPED):' /tmp/ssh-tty.log || exit 1; \
     for _ in $(seq 1 20); do \
         test -e regress/ctl-sock || break; \
         sleep 1; \
@@ -403,21 +404,48 @@ RUN set -euo pipefail; \
 
 # Exercise upstream's password regression separately, so its test-only root
 # login override and nonempty SUDO placeholder cannot change any other case.
-# Ubuntu's chpasswd generates a yescrypt hash explicitly; the cleartext and the
-# unlocked root password exist only in this discarded builder layer.
+# Upstream's empty-password cases return before crypt(). Add a nonempty wrong
+# password and a wrong-then-correct retry, checking the server's decision and
+# prompt count so a bypass cannot masquerade as a successful retry.
+# The cleartext and unlocked root password stay in this discarded builder layer.
 RUN set -euo pipefail; \
     test_password='filc-openssh-password-test'; \
-    printf 'root:%s\n' "${test_password}" | chpasswd --crypt-method YESCRYPT; \
-    grep -q '^root:\$y\$' /etc/shadow; \
     printf '%s\n' "${test_password}" > regress/password; \
     chmod 0600 regress/password; \
     cleanup_password() { passwd --lock root >/dev/null; rm -f regress/password; }; \
     trap cleanup_password EXIT; \
-    timeout -k 60 900 make t-exec LTESTS=password SUDO=env \
-        TEST_SSH_SSHD_CONFOPTS='PermitRootLogin yes' 2>&1 | tee /tmp/password.log; \
-    test "$(grep -c '^run test ' /tmp/password.log)" -eq 1; \
-    test "$(grep -c '^skip test ' /tmp/password.log || true)" -eq 0; \
-    ! grep -Eq '^(Skipped|SKIPPED):' /tmp/password.log
+    printf '%s\n' \
+        '' \
+        'trace wrong nonempty password' \
+        'echo filc-openssh-wrong-password > "${OBJ}/replypass"' \
+        'echo 1 > "${OBJ}/replypass.N"' \
+        '${SSH} $opts -oNumberOfPasswordPrompts=1 -F "${OBJ}/ssh_proxy" somehost true' \
+        'rc=$?' \
+        'test "${rc}" -eq 255 || fail "wrong-password exit: ${rc}"' \
+        'grep -Fq "Failed password for ${USER} from " "${TEST_SSHD_LOGFILE}" || fail "missing password denial"' \
+        'test "$(cat "${OBJ}/replypass.N")" -eq 2 || fail "wrong-password prompt count"' \
+        'trace wrong then correct password' \
+        '(echo filc-openssh-wrong-password; cat "${OBJ}/password") > "${OBJ}/replypass"' \
+        'echo 1 > "${OBJ}/replypass.N"' \
+        '${SSH} $opts -oNumberOfPasswordPrompts=2 -F "${OBJ}/ssh_proxy" somehost true' \
+        'test "$?" -eq 0 || fail "password retry failed"' \
+        'test "$(cat "${OBJ}/replypass.N")" -eq 3 || fail "password retry did not use two prompts"' \
+        'grep -Fq "Failed password for ${USER} from " "${TEST_SSHD_LOGFILE}" || fail "missing retry denial"' \
+        'grep -Fq "Accepted password for ${USER} from " "${TEST_SSHD_LOGFILE}" || fail "missing retry acceptance"' \
+        >> regress/password.sh; \
+    for method in YESCRYPT SHA512; do \
+        printf 'root:%s\n' "${test_password}" | chpasswd --crypt-method "${method}"; \
+        case "${method}" in \
+            YESCRYPT) grep -q '^root:\$y\$' /etc/shadow ;; \
+            SHA512) grep -q '^root:\$6\$' /etc/shadow ;; \
+        esac; \
+        TEST_REGRESS_CACHE_DIR= timeout -k 60 900 make t-exec LTESTS=password SUDO=env \
+            TEST_SSH_SSHD_CONFOPTS='PermitRootLogin yes' 2>&1 | tee /tmp/password.log; \
+        test "$(grep -c '^run test ' /tmp/password.log)" -eq 1; \
+        test "$(grep -c '^skip test ' /tmp/password.log || true)" -eq 0; \
+        ! grep -Eq '^(Skipped|SKIPPED):|ok cached' /tmp/password.log || exit 1; \
+        echo "password acceptance, rejection and retry passed: ${method}"; \
+    done
 
 # The suite is past, so install for real: the smoke test below needs the
 # helpers at the compiled-in /libexec paths, which only a real install gives.
@@ -495,18 +523,18 @@ RUN set -e; \
             *) exit 1 ;; \
         esac; \
         readelf -lW "${f}" > /tmp/art.segments; \
-        ! grep -Fq ' INTERP ' /tmp/art.segments; \
+        ! grep -Fq ' INTERP ' /tmp/art.segments || exit 1; \
         grep -Fq 'GNU_RELRO' /tmp/art.segments; \
-        ! grep -Eq 'GNU_STACK.*RWE' /tmp/art.segments; \
+        ! grep -Eq 'GNU_STACK.*RWE' /tmp/art.segments || exit 1; \
         readelf -SW "${f}" > /tmp/art.sections; \
-        ! grep -Fq ".debug_info" /tmp/art.sections; \
+        ! grep -Fq ".debug_info" /tmp/art.sections || exit 1; \
         readelf -sW "${f}" > /tmp/art.symbols; \
         grep -Fq "pizlonated" /tmp/art.symbols; \
         grep -Eq "filc_call_user_main|zgc_alloc" /tmp/art.symbols; \
         strings -a "${f}" > /tmp/art.strings; \
-        ! grep -q '@llvm\.' /tmp/art.strings; \
-        ! grep -Fq 'Unhandled intrinsic' /tmp/art.strings; \
-        ! grep -Fq 'cannot handle inline asm' /tmp/art.strings; \
+        ! grep -q '@llvm\.' /tmp/art.strings || exit 1; \
+        ! grep -Fq 'Unhandled intrinsic' /tmp/art.strings || exit 1; \
+        ! grep -Fq 'cannot handle inline asm' /tmp/art.strings || exit 1; \
     done; \
     test "$(stat -c '%u:%g:%a' /artifact/libexec/ssh-keysign)" = '0:0:4711'; \
     echo 'all 14 artifact binaries are stripped static Fil-C PIEs without compiler traps'
@@ -524,7 +552,7 @@ RUN set -euo pipefail; \
     cp -a /artifact/libexec /libexec; \
     /bin/sshd -t; \
     ! grep -Eq 'SC_ALLOW\(__NR_(clone|clone3|fork|vfork|setgroups|setgid|setregid|setresgid|setuid|setreuid|setresuid|tkill|tgkill)\)' \
-        sandbox-seccomp-filter.c; \
+        sandbox-seccomp-filter.c || exit 1; \
     strings -a /libexec/ssh-pkcs11-helper > /tmp/pkcs11-helper.strings; \
     grep -Fq 'PKCS#11 support disabled at compile time' /tmp/pkcs11-helper.strings; \
     set +e; \
@@ -547,7 +575,7 @@ RUN set -euo pipefail; \
         TEST_SSH_HOSTBASED_AUTH=setupandrun 2>&1 | tee /tmp/hostbased.log; \
     test "$(grep -c '^run test ' /tmp/hostbased.log)" -eq 1; \
     test "$(grep -c '^skip test ' /tmp/hostbased.log || true)" -eq 0; \
-    ! grep -Eq '^(Skipped|SKIPPED):' /tmp/hostbased.log; \
+    ! grep -Eq '^(Skipped|SKIPPED):' /tmp/hostbased.log || exit 1; \
     cmp ssh_config.out /artifact/etc/ssh/ssh_config; \
     test ! -e /artifact/etc/ssh/ssh_known_hosts
 
